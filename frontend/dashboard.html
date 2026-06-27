@@ -7,165 +7,157 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <style>
-  [x-cloak] { display: none !important; }
-  body { background: #f1f5f9; }
-  .cell-yes { background: #dcfce7; color: #166534; }
-  .cell-no { background: #fee2e2; color: #991b1b; }
-  .cell-unknown { background: #f3f4f6; color: #6b7280; }
-  .sidebar { width: 300px; min-width: 300px; }
-  #compare-table { border-collapse: collapse; }
-  #compare-table th, #compare-table td { border: 1px solid #e2e8f0; }
-  .logo-fallback { width: 48px; height: 48px; background: #1e40af; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px; text-align: center; line-height: 1.2; }
+  [x-cloak]{display:none!important}
+  body{background:#f1f5f9;font-family:system-ui,-apple-system,sans-serif}
+  .cell-yes{background:#dcfce7;color:#166534}
+  .cell-no{background:#fee2e2;color:#991b1b}
+  .cell-unknown{background:#f3f4f6;color:#6b7280}
+  #compare-table th,#compare-table td{border:1px solid #e2e8f0}
+  .ts-wrapper{width:100%}
+  .ts-control{border:1px solid #d1d5db!important;border-radius:8px!important;padding:6px 10px!important;font-size:13px!important;min-height:38px!important}
+  .ts-dropdown{font-size:13px!important;border-radius:8px!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}
+  .ts-dropdown .option.selected{background:#eff6ff;color:#1d4ed8}
+  .ts-dropdown .option:hover{background:#eff6ff}
+  .logo-fb{width:44px;height:44px;background:#1e40af;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:10px;text-align:center;line-height:1.2}
 </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
 
 <!-- NAVBAR -->
-<nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+<nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
   <div class="flex items-center gap-3">
     <img src="https://rsfinanzas.com/wp-content/uploads/2023/08/Logo-RS-SEGUROS-Y-FINANZAS-ISOTIPO-COLOR.png"
-         onerror="this.style.display='none'; this.nextElementSibling.style.display='block'"
-         class="h-10" alt="RS">
-    <span class="hidden font-bold text-blue-800 text-lg">RS Seguros</span>
-    <span class="text-gray-400 mx-2">|</span>
-    <span class="font-semibold text-gray-700">Comparador de Coberturas</span>
+         onerror="this.style.display='none'" class="h-9" alt="RS">
+    <span class="font-bold text-gray-700 text-base hidden sm:block">RS Seguros &amp; Finanzas</span>
+    <span class="text-gray-300 hidden sm:block">|</span>
+    <span class="text-sm text-gray-500 hidden sm:block">Comparador de Coberturas</span>
   </div>
   <div class="flex items-center gap-3">
-    <!-- Sync button -->
-    <button @click="triggerSync()"
-            :disabled="syncing"
-            class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50">
-      <svg x-show="!syncing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <button @click="triggerSync()" :disabled="syncing"
+      class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50">
+      <svg :class="syncing?'animate-spin':''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
       </svg>
-      <svg x-show="syncing" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-      </svg>
-      <span x-text="syncing ? 'Sincronizando...' : 'Sincronizar'"></span>
+      <span x-text="syncing?'Sincronizando...':'Sincronizar'"></span>
     </button>
-    <button @click="logout()" class="text-sm text-gray-500 hover:text-red-600 transition">Salir</button>
+    <button @click="logout()" class="text-sm text-gray-400 hover:text-red-500 transition">Salir</button>
   </div>
 </nav>
 
-<!-- SYNC PROGRESS MODAL -->
-<div x-show="syncing || showSyncLog" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-  <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4">
+<!-- SYNC MODAL -->
+<div x-show="syncing||showSyncLog" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg">
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-bold text-gray-800">Sincronización en curso</h3>
-      <button x-show="!syncing" @click="showSyncLog=false" class="text-gray-400 hover:text-gray-600">✕</button>
+      <h3 class="font-bold text-gray-800">Sincronización</h3>
+      <button x-show="!syncing" @click="showSyncLog=false" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
     </div>
-    <div class="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
-      <template x-for="line in syncProgress" :key="line">
-        <div x-text="line"></div>
-      </template>
+    <div class="bg-gray-900 rounded-lg p-4 h-56 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+      <template x-for="l in syncProgress" :key="l"><div x-text="l"></div></template>
       <div x-show="syncing" class="animate-pulse">▌</div>
     </div>
     <div x-show="!syncing" class="mt-4 flex justify-end">
-      <button @click="showSyncLog=false; loadCompanies()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Cerrar y actualizar</button>
+      <button @click="showSyncLog=false;init()" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold">Cerrar y actualizar</button>
     </div>
   </div>
 </div>
 
 <!-- TOAST -->
-<div x-show="toast" x-transition
-     class="fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium"
-     x-text="toast"></div>
+<div x-show="toast" x-transition class="fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium" x-text="toast"></div>
 
+<!-- MAIN LAYOUT -->
 <div class="flex h-[calc(100vh-57px)]">
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar bg-white border-r border-gray-200 overflow-y-auto p-5 flex flex-col gap-5">
-
-    <!-- Step 1: Rama -->
-    <div>
-      <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">1 · Rama</label>
-      <select x-model="selectedRama" @change="onRamaChange()"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">— Seleccionar —</option>
-        <template x-for="r in ramas" :key="r">
-          <option :value="r" x-text="r"></option>
-        </template>
-      </select>
+  <!-- SIDEBAR FILTERS -->
+  <aside class="w-72 min-w-72 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
+    <div class="p-4 border-b border-gray-100 bg-gray-50">
+      <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filtros</h2>
     </div>
 
-    <!-- Step 2: Plan -->
-    <div x-show="selectedRama">
-      <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">2 · Plan</label>
-      <select x-model="selectedPlan" @change="onPlanChange()"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">— Seleccionar —</option>
-        <template x-for="[nombre, _] in Object.entries(planes)" :key="nombre">
-          <option :value="nombre" x-text="nombre"></option>
-        </template>
-      </select>
-    </div>
+    <div class="p-4 space-y-5 flex-1">
 
-    <!-- Step 3: Variante -->
-    <div x-show="selectedPlan && variantes.length > 0">
-      <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">3 · Variante</label>
-      <div class="flex flex-wrap gap-2">
-        <button @click="selectedVariante=''"
-                :class="selectedVariante==='' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-700'"
-                class="px-3 py-1 rounded-full text-xs font-medium transition">Todas</button>
-        <template x-for="v in variantes" :key="v">
-          <button @click="selectedVariante=v"
-                  :class="selectedVariante===v ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-700'"
-                  class="px-3 py-1 rounded-full text-xs font-medium transition" x-text="v"></button>
-        </template>
+      <!-- Rama -->
+      <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Ramo</label>
+        <select id="sel-rama" placeholder="Buscar ramo..."></select>
       </div>
-    </div>
 
-    <!-- Step 4: Companies -->
-    <div x-show="selectedPlan">
-      <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">4 · Compañías</label>
-      <div class="space-y-1 max-h-64 overflow-y-auto pr-1">
-        <template x-for="c in companiesForRama" :key="c.id">
-          <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
-            <input type="checkbox" :value="c.id" x-model="selectedCompanies"
-                   class="rounded text-blue-600">
-            <template x-if="c.logo_url">
-              <img :src="c.logo_url" class="h-5 w-auto object-contain" :alt="c.nombre"
-                   onerror="this.style.display='none'">
-            </template>
-            <span class="text-sm text-gray-700" x-text="c.nombre"></span>
-          </label>
-        </template>
+      <!-- Plan -->
+      <div x-show="selectedRama">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Plan</label>
+        <select id="sel-plan" placeholder="Buscar plan..."></select>
       </div>
-      <div class="flex gap-2 mt-2">
-        <button @click="selectedCompanies=companiesForRama.map(c=>c.id)"
-                class="text-xs text-blue-600 hover:underline">Todas</button>
-        <span class="text-gray-300">|</span>
-        <button @click="selectedCompanies=[]"
-                class="text-xs text-gray-500 hover:underline">Ninguna</button>
-      </div>
-    </div>
 
-    <!-- Compare button -->
-    <button x-show="selectedCompanies.length >= 1 && selectedPlan"
-            @click="compare()"
-            :disabled="loading"
-            class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50">
-      <span x-show="!loading">Comparar →</span>
-      <span x-show="loading">Cargando...</span>
-    </button>
+      <!-- Variante -->
+      <div x-show="variantes.length > 0">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Variante</label>
+        <div class="flex flex-wrap gap-1.5">
+          <button @click="selectedVariante=''" :class="selectedVariante===''?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            class="px-3 py-1 rounded-full text-xs font-medium transition">Todas</button>
+          <template x-for="v in variantes" :key="v">
+            <button @click="selectedVariante=v" :class="selectedVariante===v?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+              class="px-3 py-1 rounded-full text-xs font-medium transition" x-text="v"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Compañías -->
+      <div x-show="selectedPlan">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          Compañías <span class="text-blue-600 font-normal" x-text="selectedCompanies.length > 0 ? '('+selectedCompanies.length+' sel.)' : ''"></span>
+        </label>
+        <select id="sel-companies" multiple placeholder="Buscar compañía..."></select>
+        <div class="flex gap-3 mt-2">
+          <button @click="selectAllCompanies()" class="text-xs text-blue-600 hover:underline">Todas</button>
+          <span class="text-gray-200">|</span>
+          <button @click="clearCompanies()" class="text-xs text-gray-400 hover:underline">Ninguna</button>
+        </div>
+      </div>
+
+      <!-- Coberturas filter (visible after compare) -->
+      <div x-show="allCoverageKeys.length > 0">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Coberturas a mostrar</label>
+        <input x-model="coverageSearch" type="text" placeholder="Buscar cobertura..."
+          class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <div class="space-y-1 max-h-52 overflow-y-auto">
+          <template x-for="key in filteredCoverageKeys" :key="key">
+            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+              <input type="checkbox" :checked="selectedCoverageKeys.includes(key)"
+                @change="toggleCoverage(key)" class="rounded text-blue-600">
+              <span class="text-xs text-gray-700" x-text="coverageLabels[key]||key"></span>
+            </label>
+          </template>
+        </div>
+        <div class="flex gap-3 mt-1">
+          <button @click="selectedCoverageKeys=[...allCoverageKeys]" class="text-xs text-blue-600 hover:underline">Todas</button>
+          <span class="text-gray-200">|</span>
+          <button @click="selectedCoverageKeys=[]" class="text-xs text-gray-400 hover:underline">Ninguna</button>
+        </div>
+      </div>
+
+      <!-- Compare button -->
+      <button x-show="selectedCompanies.length>=1&&selectedPlan" @click="compare()" :disabled="loading"
+        class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
+        <span x-show="!loading">Ver comparativa →</span>
+        <span x-show="loading">Cargando...</span>
+      </button>
+    </div>
 
     <!-- Add URL company -->
-    <div class="border-t pt-4 mt-auto">
-      <button @click="showAddUrl=!showAddUrl" class="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1">
-        <span>+ Agregar compañía por URL</span>
+    <div class="p-4 border-t border-gray-100">
+      <button @click="showAddUrl=!showAddUrl" class="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1 transition">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Agregar compañía por URL
       </button>
       <div x-show="showAddUrl" class="mt-3 space-y-2">
-        <input x-model="newCompany.nombre" type="text" placeholder="Nombre compañía"
-               class="w-full border rounded px-2 py-1.5 text-xs">
-        <input x-model="newCompany.url" type="url" placeholder="https://..."
-               class="w-full border rounded px-2 py-1.5 text-xs">
-        <input x-model="newCompany.logo" type="url" placeholder="URL logo (opcional)"
-               class="w-full border rounded px-2 py-1.5 text-xs">
-        <button @click="addUrlCompany()" class="w-full bg-gray-700 text-white text-xs py-1.5 rounded">Agregar</button>
+        <input x-model="newCo.nombre" type="text" placeholder="Nombre" class="w-full border rounded-lg px-3 py-1.5 text-xs">
+        <input x-model="newCo.url" type="url" placeholder="https://..." class="w-full border rounded-lg px-3 py-1.5 text-xs">
+        <input x-model="newCo.logo" type="url" placeholder="URL logo (opcional)" class="w-full border rounded-lg px-3 py-1.5 text-xs">
+        <button @click="addUrlCompany()" class="w-full bg-gray-700 hover:bg-gray-800 text-white text-xs py-2 rounded-lg transition">Agregar</button>
       </div>
     </div>
-
   </aside>
 
   <!-- MAIN CONTENT -->
@@ -173,63 +165,45 @@
 
     <!-- Empty state -->
     <div x-show="!compareResult" class="flex flex-col items-center justify-center h-full text-center text-gray-400">
-      <svg class="w-20 h-20 mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+      <svg class="w-16 h-16 mb-4 opacity-25" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/>
       </svg>
-      <p class="text-lg font-medium">Seleccioná rama, plan y compañías para comparar</p>
-      <p class="text-sm mt-1">Si la base está vacía, primero hacé clic en <strong>Sincronizar</strong></p>
+      <p class="text-base font-medium text-gray-500">Seleccioná ramo, plan y compañías para comparar</p>
+      <p class="text-sm mt-1 text-gray-400" x-show="companies.length===0">Si la base está vacía, primero hacé clic en <strong>Sincronizar</strong></p>
     </div>
 
     <!-- Results -->
     <div x-show="compareResult">
-
       <!-- Toolbar -->
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h2 class="text-xl font-bold text-gray-800" x-text="currentTitle"></h2>
-          <p class="text-sm text-gray-500 mt-0.5"
-             x-text="selectedCoverageKeys.length + ' coberturas seleccionadas de ' + allCoverageKeys.length"></p>
+          <h2 class="text-lg font-bold text-gray-800" x-text="currentTitle"></h2>
+          <p class="text-xs text-gray-400 mt-0.5" x-text="selectedCoverageKeys.length+' coberturas · '+selectedCompanies.length+' compañías'"></p>
         </div>
-        <div class="flex gap-3">
-          <button @click="toggleAllCoverages()"
-                  class="text-sm text-blue-600 hover:underline" x-text="selectedCoverageKeys.length === allCoverageKeys.length ? 'Deseleccionar todas' : 'Seleccionar todas'"></button>
-          <button @click="generateImage()"
-                  class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition shadow-md">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            Generar imagen
-          </button>
-        </div>
+        <button @click="generateImage()"
+          class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition shadow-md">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          Generar imagen
+        </button>
       </div>
 
-      <!-- Coverage filter chips -->
-      <div class="flex flex-wrap gap-1.5 mb-4">
-        <template x-for="key in allCoverageKeys" :key="key">
-          <button @click="toggleCoverage(key)"
-                  :class="selectedCoverageKeys.includes(key) ? 'bg-blue-700 text-white' : 'bg-white text-gray-500 border border-gray-300'"
-                  class="px-2.5 py-1 rounded-full text-xs font-medium transition"
-                  x-text="coverageLabels[key] || key"></button>
-        </template>
-      </div>
-
-      <!-- Table -->
+      <!-- Comparison table -->
       <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-        <table id="compare-table" class="min-w-full text-sm">
+        <table id="compare-table" class="min-w-full text-xs border-collapse">
           <thead>
-            <tr class="bg-gray-50">
-              <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-48">Cobertura</th>
-              <template x-for="[cid, cdata] in Object.entries(compareResult.companies)" :key="cid">
-                <th class="px-4 py-3 text-center min-w-40">
-                  <div class="flex flex-col items-center gap-1">
-                    <template x-if="cdata.logo_url">
-                      <img :src="cdata.logo_url" class="h-10 w-auto object-contain max-w-[120px]"
-                           :alt="cdata.nombre" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 bg-gray-50 uppercase tracking-wide w-44 sticky left-0 z-10">Cobertura</th>
+              <template x-for="[cid,cd] in Object.entries(compareResult.companies)" :key="cid">
+                <th class="px-3 py-3 text-center bg-slate-800 min-w-36">
+                  <div class="flex flex-col items-center gap-1.5">
+                    <template x-if="cd.logo_url">
+                      <img :src="cd.logo_url" class="h-9 w-auto object-contain max-w-28" :alt="cd.nombre"
+                           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     </template>
-                    <div class="logo-fallback" :style="!cdata.logo_url ? 'display:flex' : 'display:none'"
-                         x-text="cdata.nombre.substring(0,8)"></div>
-                    <span class="text-xs font-bold text-gray-700" x-text="cdata.nombre"></span>
+                    <div class="logo-fb" :style="cd.logo_url?'display:none':'display:flex'" x-text="cd.nombre.substring(0,6)"></div>
+                    <span class="text-xs font-bold text-white" x-text="cd.nombre"></span>
                   </div>
                 </th>
               </template>
@@ -237,320 +211,273 @@
           </thead>
           <tbody>
             <template x-for="key in selectedCoverageKeys" :key="key">
-              <tr class="hover:bg-blue-50/30 transition">
-                <td class="px-4 py-3 font-medium text-gray-700 text-xs">
+              <tr class="hover:bg-blue-50/40 transition group">
+                <td class="px-4 py-2.5 font-semibold text-gray-700 bg-white sticky left-0 z-10 border-r border-gray-200">
                   <div class="flex items-center gap-2">
-                    <input type="checkbox" :checked="selectedCoverageKeys.includes(key)"
-                           @click="toggleCoverage(key)" class="rounded text-blue-600">
-                    <span x-text="coverageLabels[key] || key"></span>
+                    <input type="checkbox" :checked="true" @change="toggleCoverage(key)" class="rounded text-blue-600">
+                    <span x-text="coverageLabels[key]||key"></span>
                   </div>
                 </td>
-                <template x-for="[cid, cdata] in Object.entries(compareResult.companies)" :key="cid">
-                  <td class="px-3 py-2.5 text-center text-xs"
-                      :class="getCellClass(cdata.coberturas[key])">
-                    <div class="font-medium" x-text="getCellIcon(cdata.coberturas[key])"></div>
-                    <div class="text-xs mt-0.5 leading-tight" x-text="getCellText(cdata.coberturas[key])"></div>
+                <template x-for="[cid,cd] in Object.entries(compareResult.companies)" :key="cid">
+                  <td class="px-3 py-2 text-center" :class="cellClass(cd.coberturas[key])">
+                    <div class="font-bold text-sm" x-text="cellIcon(cd.coberturas[key])"></div>
+                    <div class="text-xs mt-0.5 leading-tight opacity-80" x-text="cellText(cd.coberturas[key])"></div>
                   </td>
                 </template>
               </tr>
             </template>
-            <!-- Particularidades row -->
             <tr class="bg-gray-50 border-t-2 border-gray-300">
-              <td class="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Particularidades</td>
-              <template x-for="[cid, cdata] in Object.entries(compareResult.companies)" :key="cid">
-                <td class="px-3 py-3 text-xs text-gray-600 italic" x-text="cdata.particularidades || '—'"></td>
+              <td class="px-4 py-3 text-xs font-bold text-gray-400 uppercase sticky left-0 bg-gray-50">Particularidades</td>
+              <template x-for="[cid,cd] in Object.entries(compareResult.companies)" :key="cid">
+                <td class="px-3 py-3 text-xs text-gray-500 italic" x-text="cd.particularidades||'—'"></td>
               </template>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
-
   </main>
 </div>
 
-<!-- HIDDEN IMAGE TEMPLATE (for html2canvas) -->
-<div id="image-template" style="position:fixed; left:-9999px; top:0; background:white;">
-</div>
+<div id="img-tpl" style="position:fixed;left:-9999px;top:0;background:white;"></div>
 
 <script>
-const API = '';
 const token = () => localStorage.getItem('rs_token');
-const headers = () => ({'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token()});
-
-async function api(path, opts={}) {
-  const r = await fetch(API + path, {...opts, headers: {...headers(), ...(opts.headers||{})}});
-  if (r.status === 401) { localStorage.removeItem('rs_token'); window.location.href='/'; }
+const hdr = () => ({'Content-Type':'application/json','Authorization':'Bearer '+token()});
+async function api(path,opts={}){
+  const r=await fetch(path,{...opts,headers:{...hdr(),...(opts.headers||{})}});
+  if(r.status===401){localStorage.removeItem('rs_token');window.location.href='/';return null;}
   return r;
 }
 
-function app() {
-  return {
-    // State
-    ramas: [],
-    planes: {},
-    variantes: [],
-    companies: [],
-    selectedRama: '',
-    selectedPlan: '',
-    selectedVariante: '',
-    selectedCompanies: [],
-    compareResult: null,
-    allCoverageKeys: [],
-    selectedCoverageKeys: [],
-    coverageLabels: {},
-    currentTitle: '',
-    loading: false,
-    syncing: false,
-    syncProgress: [],
-    showSyncLog: false,
-    toast: '',
-    showAddUrl: false,
-    newCompany: {nombre:'', url:'', logo:''},
+// Tom Select instances
+let tsRama,tsPlan,tsCompanies;
 
-    async init() {
-      if (!token()) { window.location.href = '/'; return; }
-      await this.loadCompanies();
-      await this.loadRamas();
-    },
+function app(){return{
+  companies:[], ramas:[], planes:{}, variantes:[],
+  selectedRama:'', selectedPlan:'', selectedVariante:'', selectedCompanies:[],
+  compareResult:null, allCoverageKeys:[], selectedCoverageKeys:[], coverageLabels:{},
+  coverageSearch:'', currentTitle:'',
+  loading:false, syncing:false, syncProgress:[], showSyncLog:false,
+  toast:'', showAddUrl:false,
+  newCo:{nombre:'',url:'',logo:''},
 
-    async loadCompanies() {
-      const r = await api('/companies');
-      if (r.ok) this.companies = await r.json();
-    },
+  get filteredCoverageKeys(){
+    const q=this.coverageSearch.toLowerCase();
+    return this.allCoverageKeys.filter(k=>(this.coverageLabels[k]||k).toLowerCase().includes(q));
+  },
 
-    async loadRamas() {
-      const r = await api('/ramas');
-      if (r.ok) this.ramas = await r.json();
-    },
+  async init(){
+    if(!token()){window.location.href='/';return;}
+    await Promise.all([this.loadCompanies(), this.loadRamas()]);
+    this.$nextTick(()=>this.initSelects());
+  },
 
-    get companiesForRama() {
-      if (!this.selectedRama) return this.companies;
-      return this.companies.filter(c => c.ramas.includes(this.selectedRama));
-    },
+  async loadCompanies(){
+    const r=await api('/companies'); if(r&&r.ok) this.companies=await r.json();
+  },
+  async loadRamas(){
+    const r=await api('/ramas'); if(r&&r.ok) this.ramas=await r.json();
+  },
 
-    async onRamaChange() {
-      this.selectedPlan = '';
-      this.selectedVariante = '';
-      this.selectedCompanies = [];
-      this.planes = {};
-      this.compareResult = null;
-      if (!this.selectedRama) return;
-      const r = await api('/planes?rama=' + encodeURIComponent(this.selectedRama));
-      if (r.ok) this.planes = await r.json();
-    },
+  initSelects(){
+    // Rama select
+    if(tsRama) tsRama.destroy();
+    tsRama=new TomSelect('#sel-rama',{
+      options:this.ramas.map(r=>({value:r,text:r})),
+      placeholder:'Buscar ramo...',
+      onChange:v=>{this.selectedRama=v;this.onRamaChange();}
+    });
 
-    onPlanChange() {
-      this.selectedVariante = '';
-      this.compareResult = null;
-      this.variantes = this.planes[this.selectedPlan] || [];
-    },
+    // Plan select (empty initially)
+    if(tsPlan) tsPlan.destroy();
+    tsPlan=new TomSelect('#sel-plan',{
+      placeholder:'Seleccioná primero un ramo...',
+      onChange:v=>{this.selectedPlan=v;this.onPlanChange();}
+    });
 
-    async compare() {
-      if (!this.selectedPlan || this.selectedCompanies.length === 0) return;
-      this.loading = true;
-      try {
-        let url = `/compare?rama=${encodeURIComponent(this.selectedRama)}&plan=${encodeURIComponent(this.selectedPlan)}&companies=${this.selectedCompanies.join(',')}`;
-        if (this.selectedVariante) url += `&variante=${encodeURIComponent(this.selectedVariante)}`;
-        const r = await api(url);
-        if (!r.ok) return;
-        const data = await r.json();
-        this.compareResult = data;
-        this.coverageLabels = data.coverage_keys || {};
-        this.allCoverageKeys = Object.keys(data.coverage_keys || {});
-        this.selectedCoverageKeys = [...this.allCoverageKeys];
-        this.currentTitle = `${this.selectedRama} · ${this.selectedPlan}` + (this.selectedVariante ? ` · ${this.selectedVariante}` : '');
-      } finally {
-        this.loading = false;
-      }
-    },
+    // Companies multiselect
+    if(tsCompanies) tsCompanies.destroy();
+    tsCompanies=new TomSelect('#sel-companies',{
+      options:this.companies.map(c=>({value:String(c.id),text:c.nombre})),
+      plugins:['checkbox_options','remove_button'],
+      placeholder:'Buscar compañía...',
+      maxItems:null,
+      onChange:vals=>{ this.selectedCompanies=vals.map(Number); }
+    });
+  },
 
-    toggleCoverage(key) {
-      const idx = this.selectedCoverageKeys.indexOf(key);
-      if (idx >= 0) this.selectedCoverageKeys.splice(idx, 1);
-      else this.selectedCoverageKeys.push(key);
-    },
+  async onRamaChange(){
+    this.selectedPlan='';this.selectedVariante='';this.selectedCompanies=[];
+    this.planes={};this.compareResult=null;
+    if(!this.selectedRama) return;
 
-    toggleAllCoverages() {
-      if (this.selectedCoverageKeys.length === this.allCoverageKeys.length)
-        this.selectedCoverageKeys = [];
-      else
-        this.selectedCoverageKeys = [...this.allCoverageKeys];
-    },
+    const r=await api('/planes?rama='+encodeURIComponent(this.selectedRama));
+    if(r&&r.ok) this.planes=await r.json();
 
-    getCellClass(valor) {
-      if (!valor || valor === 'No incluye') return 'cell-no';
-      if (valor === 'No especificado') return 'cell-unknown';
-      return 'cell-yes';
-    },
-
-    getCellIcon(valor) {
-      if (!valor || valor === 'No incluye') return '✗';
-      if (valor === 'No especificado') return '—';
-      return '✓';
-    },
-
-    getCellText(valor) {
-      if (!valor || valor === 'No incluye' || valor === 'No especificado') return '';
-      // Truncate long values
-      return valor.length > 80 ? valor.substring(0, 80) + '...' : valor;
-    },
-
-    async triggerSync() {
-      const r = await api('/sync', {method:'POST'});
-      if (!r.ok) { const d = await r.json(); this.showToast(d.detail || 'Error'); return; }
-      this.syncing = true;
-      this.syncProgress = ['Iniciando sincronización...'];
-      this.showSyncLog = true;
-      this.pollSync();
-    },
-
-    async pollSync() {
-      const r = await api('/sync/status');
-      if (!r.ok) return;
-      const data = await r.json();
-      this.syncProgress = data.progress;
-      if (data.running) {
-        setTimeout(() => this.pollSync(), 2000);
-      } else {
-        this.syncing = false;
-        if (data.error) this.syncProgress.push('ERROR: ' + data.error);
-      }
-    },
-
-    async addUrlCompany() {
-      const r = await api('/companies/url', {
-        method:'POST',
-        body: JSON.stringify({nombre: this.newCompany.nombre, url_manual: this.newCompany.url, logo_url: this.newCompany.logo || null})
-      });
-      if (r.ok) {
-        this.showAddUrl = false;
-        this.newCompany = {nombre:'', url:'', logo:''};
-        this.showToast('Compañía agregada. Sincronizá para extraer coberturas.');
-      }
-    },
-
-    showToast(msg, duration=3500) {
-      this.toast = msg;
-      setTimeout(() => this.toast = '', duration);
-    },
-
-    async generateImage() {
-      const companies = Object.values(this.compareResult.companies);
-      const coverageKeys = this.selectedCoverageKeys;
-      const labels = this.coverageLabels;
-      const title = this.currentTitle;
-      const today = new Date().toLocaleDateString('es-AR');
-
-      // Build the image HTML
-      const companyHeaders = companies.map(c => {
-        const logoHtml = c.logo_url
-          ? `<img src="${c.logo_url}" style="height:48px;max-width:120px;object-fit:contain;margin:0 auto 4px;" onerror="this.style.display='none'">`
-          : '';
-        return `<th style="padding:10px 14px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:140px;">
-          ${logoHtml}
-          <div style="font-size:11px;font-weight:700;">${c.nombre}</div>
-        </th>`;
-      }).join('');
-
-      const rows = coverageKeys.map(key => {
-        const label = labels[key] || key;
-        const cells = companies.map(c => {
-          const val = c.coberturas[key] || 'No incluye';
-          let bg, color, icon;
-          if (val === 'No incluye') { bg='#fee2e2'; color='#991b1b'; icon='✗'; }
-          else if (val === 'No especificado') { bg='#f3f4f6'; color='#6b7280'; icon='—'; }
-          else { bg='#dcfce7'; color='#166534'; icon='✓'; }
-          const text = (val !== 'No incluye' && val !== 'No especificado')
-            ? `<div style="font-size:10px;margin-top:3px;color:#374151;">${val.length > 70 ? val.substring(0,70)+'...' : val}</div>`
-            : '';
-          return `<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;">
-            <div style="font-weight:700;font-size:15px;color:${color};">${icon}</div>${text}
-          </td>`;
-        }).join('');
-        return `<tr>
-          <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#374151;border:1px solid #e2e8f0;background:#f8fafc;">${label}</td>
-          ${cells}
-        </tr>`;
-      }).join('');
-
-      // Fetch RS logo as base64
-      let rsLogoHtml = '<div style="color:#1e3a5f;font-weight:900;font-size:18px;">RS SEGUROS</div>';
-      try {
-        const logoResp = await fetch('https://rsfinanzas.com/wp-content/uploads/2023/08/Logo-RS-SEGUROS-Y-FINANZAS-ISOTIPO-COLOR.png');
-        if (logoResp.ok) {
-          const blob = await logoResp.blob();
-          const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
-          rsLogoHtml = `<img src="${b64}" style="height:56px;object-fit:contain;">`;
-        }
-      } catch(e) {}
-
-      const html = `
-        <div style="font-family:Arial,sans-serif;background:white;padding:0;width:max-content;min-width:600px;">
-          <!-- Header -->
-          <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:20px 28px;display:flex;align-items:center;justify-content:space-between;">
-            <div>
-              <div style="color:white;font-size:20px;font-weight:900;letter-spacing:-0.5px;">Comparativa de Coberturas</div>
-              <div style="color:#93c5fd;font-size:13px;margin-top:4px;">${title}</div>
-            </div>
-            ${rsLogoHtml}
-          </div>
-          <!-- Table -->
-          <table style="border-collapse:collapse;width:100%;">
-            <thead>
-              <tr>
-                <th style="padding:10px 14px;text-align:left;background:#0f172a;color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:1px solid #1e3a5f;width:170px;">Cobertura</th>
-                ${companyHeaders}
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <!-- Footer -->
-          <div style="background:#f1f5f9;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:10px;color:#94a3b8;">Generado por RS Seguros & Finanzas</span>
-            <span style="font-size:10px;color:#94a3b8;">${today}</span>
-          </div>
-        </div>`;
-
-      const container = document.getElementById('image-template');
-      container.innerHTML = html;
-      container.style.left = '-9999px';
-      container.style.position = 'fixed';
-      document.body.appendChild(container);
-
-      try {
-        const canvas = await html2canvas(container.firstElementChild, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-        });
-
-        canvas.toBlob(async (blob) => {
-          try {
-            await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-            this.showToast('✓ ¡Imagen copiada! Pegá con Ctrl+V en el chat');
-          } catch(e) {
-            // Fallback: download
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'Comparativa cobertura RS.png';
-            a.click();
-            this.showToast('Imagen descargada como "Comparativa cobertura RS.png"');
-          }
-        }, 'image/png');
-      } finally {
-        container.innerHTML = '';
-      }
-    },
-
-    logout() {
-      localStorage.removeItem('rs_token');
-      window.location.href = '/';
+    // Update plan select
+    if(tsPlan){
+      tsPlan.clear();tsPlan.clearOptions();
+      Object.keys(this.planes).forEach(n=>tsPlan.addOption({value:n,text:n}));
+      tsPlan.refreshOptions(false);
     }
+
+    // Update companies to only those with this rama
+    const filtered=this.companies.filter(c=>c.ramas.includes(this.selectedRama));
+    if(tsCompanies){
+      tsCompanies.clear();tsCompanies.clearOptions();
+      filtered.forEach(c=>tsCompanies.addOption({value:String(c.id),text:c.nombre}));
+      tsCompanies.refreshOptions(false);
+    }
+  },
+
+  onPlanChange(){
+    this.selectedVariante='';this.compareResult=null;
+    this.variantes=this.planes[this.selectedPlan]||[];
+  },
+
+  selectAllCompanies(){
+    const filtered=this.companies.filter(c=>!this.selectedRama||c.ramas.includes(this.selectedRama));
+    if(tsCompanies){
+      tsCompanies.clear();
+      filtered.forEach(c=>tsCompanies.addItem(String(c.id)));
+    }
+    this.selectedCompanies=filtered.map(c=>c.id);
+  },
+  clearCompanies(){
+    if(tsCompanies) tsCompanies.clear();
+    this.selectedCompanies=[];
+  },
+
+  async compare(){
+    if(!this.selectedPlan||this.selectedCompanies.length===0) return;
+    this.loading=true;
+    try{
+      let url=`/compare?rama=${encodeURIComponent(this.selectedRama)}&plan=${encodeURIComponent(this.selectedPlan)}&companies=${this.selectedCompanies.join(',')}`;
+      if(this.selectedVariante) url+=`&variante=${encodeURIComponent(this.selectedVariante)}`;
+      const r=await api(url); if(!r||!r.ok) return;
+      const data=await r.json();
+      this.compareResult=data;
+      this.coverageLabels=data.coverage_keys||{};
+      this.allCoverageKeys=Object.keys(data.coverage_keys||{});
+      this.selectedCoverageKeys=[...this.allCoverageKeys];
+      this.currentTitle=`${this.selectedRama} · ${this.selectedPlan}`+(this.selectedVariante?` · ${this.selectedVariante}`:'');
+    }finally{this.loading=false;}
+  },
+
+  toggleCoverage(key){
+    const i=this.selectedCoverageKeys.indexOf(key);
+    if(i>=0) this.selectedCoverageKeys.splice(i,1);
+    else this.selectedCoverageKeys.push(key);
+  },
+
+  cellClass(v){
+    if(!v||v==='No incluye') return 'cell-no';
+    if(v==='No especificado') return 'cell-unknown';
+    return 'cell-yes';
+  },
+  cellIcon(v){
+    if(!v||v==='No incluye') return '✗';
+    if(v==='No especificado') return '—';
+    return '✓';
+  },
+  cellText(v){
+    if(!v||v==='No incluye'||v==='No especificado') return '';
+    return v.length>70?v.substring(0,70)+'…':v;
+  },
+
+  async triggerSync(){
+    const r=await api('/sync',{method:'POST'});
+    if(!r) return;
+    if(!r.ok){const d=await r.json();this.showToast(d.detail||'Error');return;}
+    this.syncing=true;this.syncProgress=['Iniciando...'];this.showSyncLog=true;
+    this.pollSync();
+  },
+  async pollSync(){
+    const r=await api('/sync/status'); if(!r) return;
+    const d=await r.json();
+    this.syncProgress=d.progress;
+    if(d.running) setTimeout(()=>this.pollSync(),2500);
+    else{this.syncing=false;if(d.error) this.syncProgress.push('ERROR: '+d.error);}
+  },
+
+  async addUrlCompany(){
+    const r=await api('/companies/url',{method:'POST',body:JSON.stringify({nombre:this.newCo.nombre,url_manual:this.newCo.url,logo_url:this.newCo.logo||null})});
+    if(r&&r.ok){this.showAddUrl=false;this.newCo={nombre:'',url:'',logo:''};this.showToast('Compañía agregada. Sincronizá para procesar.');}
+  },
+
+  showToast(msg,ms=3500){this.toast=msg;setTimeout(()=>this.toast='',ms);},
+  logout(){localStorage.removeItem('rs_token');window.location.href='/';},
+
+  async generateImage(){
+    const cos=Object.values(this.compareResult.companies);
+    const keys=this.selectedCoverageKeys;
+    const lbls=this.coverageLabels;
+    const today=new Date().toLocaleDateString('es-AR');
+
+    const colHeaders=cos.map(c=>{
+      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:44px;max-width:110px;object-fit:contain;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
+      return`<th style="padding:10px 12px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:130px;">${logo}<div style="font-size:11px;font-weight:700;">${c.nombre}</div></th>`;
+    }).join('');
+
+    const rows=keys.map(k=>{
+      const label=lbls[k]||k;
+      const cells=cos.map(c=>{
+        const v=c.coberturas[k]||'No incluye';
+        let bg,col,icon;
+        if(v==='No incluye'){bg='#fee2e2';col='#991b1b';icon='✗';}
+        else if(v==='No especificado'){bg='#f3f4f6';col='#6b7280';icon='—';}
+        else{bg='#dcfce7';col='#166534';icon='✓';}
+        const txt=(v!=='No incluye'&&v!=='No especificado')?`<div style="font-size:10px;color:#374151;margin-top:2px;">${v.length>65?v.substring(0,65)+'…':v}</div>`:'';
+        return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;"><div style="font-weight:700;font-size:15px;color:${col};">${icon}</div>${txt}</td>`;
+      }).join('');
+      return`<tr><td style="padding:8px 12px;font-size:11px;font-weight:600;color:#374151;border:1px solid #e2e8f0;background:#f8fafc;">${label}</td>${cells}</tr>`;
+    }).join('');
+
+    let rsLogo=`<div style="color:white;font-weight:900;font-size:16px;">RS SEGUROS</div>`;
+    try{
+      const blob=await fetch('https://rsfinanzas.com/wp-content/uploads/2023/08/Logo-RS-SEGUROS-Y-FINANZAS-ISOTIPO-COLOR.png').then(r=>r.ok?r.blob():null);
+      if(blob){const b64=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});rsLogo=`<img src="${b64}" style="height:52px;object-fit:contain;">`;}
+    }catch(e){}
+
+    const html=`<div style="font-family:Arial,sans-serif;background:white;width:max-content;min-width:500px;">
+      <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="color:white;font-size:18px;font-weight:900;">Comparativa de Coberturas</div>
+          <div style="color:#93c5fd;font-size:12px;margin-top:3px;">${this.currentTitle}</div>
+        </div>
+        ${rsLogo}
+      </div>
+      <table style="border-collapse:collapse;width:100%;">
+        <thead><tr>
+          <th style="padding:10px 12px;text-align:left;background:#0f172a;color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:1px solid #1e3a5f;width:160px;">Cobertura</th>
+          ${colHeaders}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="background:#f1f5f9;padding:8px 18px;display:flex;justify-content:space-between;">
+        <span style="font-size:10px;color:#94a3b8;">Generado por RS Seguros &amp; Finanzas</span>
+        <span style="font-size:10px;color:#94a3b8;">${today}</span>
+      </div>
+    </div>`;
+
+    const tpl=document.getElementById('img-tpl');
+    tpl.innerHTML=html;
+    try{
+      const canvas=await html2canvas(tpl.firstElementChild,{scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff'});
+      canvas.toBlob(async blob=>{
+        try{
+          await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+          this.showToast('✓ ¡Imagen copiada! Pegá con Ctrl+V');
+        }catch(e){
+          const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+          a.download='Comparativa cobertura RS.png';a.click();
+          this.showToast('Imagen descargada como "Comparativa cobertura RS.png"');
+        }
+      },'image/png');
+    }finally{tpl.innerHTML='';}
   }
-}
+}}
 </script>
 </body>
 </html>
