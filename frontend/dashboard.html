@@ -262,6 +262,19 @@
         </button>
       </div>
 
+      <!-- Aviso: compañías sin datos para esta rama/grupo -->
+      <div x-show="companiesWithoutData.length>0" class="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-orange-700">
+        <span class="font-semibold">Sin planes en "<span x-text="(selectedGrupo||selectedPlan)"></span>":</span>
+        <span x-text="companiesWithoutData.join(', ')"></span>.
+        <span class="text-orange-500">Esa compañía no ofrece este tipo de cobertura (o falta cargarlo desde el manual).</span>
+      </div>
+
+      <!-- Estado vacío: ninguna compañía aporta datos -->
+      <div x-show="visibleColumns.length===0" class="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
+        <p class="font-medium text-gray-600">Ninguna de las compañías elegidas tiene planes en <span class="font-bold" x-text="currentTitle"></span>.</p>
+        <p class="text-sm mt-1 text-gray-400">Probá con otro tipo de cobertura, otra rama, o sumá más compañías.</p>
+      </div>
+
       <!-- Columnas ocultas -->
       <div x-show="hiddenColumns.length>0" class="mb-3 flex items-center gap-2 flex-wrap text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
         <span class="text-amber-700 font-medium" x-text="hiddenColumns.length+' columna(s) oculta(s):'"></span>
@@ -274,7 +287,7 @@
       </div>
 
       <!-- Comparison table -->
-      <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <div x-show="visibleColumns.length>0" class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
         <table id="compare-table" class="min-w-full text-xs border-collapse">
           <thead>
             <tr>
@@ -353,10 +366,20 @@ function app(){return{
 
   get filteredCompanies(){
     const q=this.companySearch.toLowerCase();
-    return this.companies.filter(c=>c.nombre.toLowerCase().includes(q));
+    let list=this.companies;
+    if(this.selectedRama) list=list.filter(c=>c.ramas.includes(this.selectedRama));
+    return list.filter(c=>c.nombre.toLowerCase().includes(q));
   },
   get allCompaniesSelected(){
-    return this.companies.length>0 && this.selectedCompanies.length===this.companies.length;
+    const list=this.filteredCompanies;
+    return list.length>0 && list.every(c=>this.selectedCompanies.includes(c.id));
+  },
+  get companiesWithoutData(){
+    if(!this.compareResult) return [];
+    const conCol=new Set(this.columns.map(c=>c.company_id));
+    return this.selectedCompanies
+      .filter(id=>!conCol.has(id))
+      .map(id=>{const c=this.companies.find(x=>x.id===id);return c?c.nombre:('#'+id);});
   },
   get canCompare(){
     return this.selectedCompanies.length>=1 && (this.selectedGrupo || this.selectedPlan);
@@ -389,8 +412,13 @@ function app(){return{
     this.compareResult=null;
   },
   toggleAllCompanies(){
-    if(this.allCompaniesSelected) this.selectedCompanies=[];
-    else this.selectedCompanies=this.companies.map(c=>c.id);
+    const list=this.filteredCompanies;
+    if(this.allCompaniesSelected){
+      const ids=new Set(list.map(c=>c.id));
+      this.selectedCompanies=this.selectedCompanies.filter(id=>!ids.has(id));
+    }else{
+      list.forEach(c=>{ if(!this.selectedCompanies.includes(c.id)) this.selectedCompanies.push(c.id); });
+    }
     this.compareResult=null;
   },
 
@@ -400,6 +428,15 @@ function app(){return{
     this.selectedGrupo=''; this.selectedPlan='';
     this.grupos=[]; this.planNames=[]; this.compareResult=null;
     this.esVehiculo=/auto|moto|veh/i.test(r);
+    // Quitar de la selección las compañías que no ofrecen esta rama
+    const sinRama=this.selectedCompanies.filter(id=>{
+      const c=this.companies.find(x=>x.id===id); return c && !c.ramas.includes(r);
+    });
+    if(sinRama.length){
+      const nombres=sinRama.map(id=>this.companies.find(x=>x.id===id).nombre).join(', ');
+      this.selectedCompanies=this.selectedCompanies.filter(id=>!sinRama.includes(id));
+      this.showToast('No ofrecen '+r+', se quitaron: '+nombres, 5000);
+    }
     if(this.esVehiculo){
       const resp=await api('/grupos?rama='+encodeURIComponent(r));
       if(resp&&resp.ok) this.grupos=await resp.json();

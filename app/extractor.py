@@ -16,7 +16,7 @@ model = genai.GenerativeModel(MODEL_NAME)
 MAX_RETRIES = 3
 BASE_BACKOFF = 20          # seconds, used if API doesn't suggest a retry delay
 INTER_CALL_DELAY = 6       # seconds between successful calls (~10 req/min ceiling)
-MAX_INPUT_CHARS = 45000    # cap input size to reduce tokens-per-minute pressure
+MAX_INPUT_CHARS = 120000   # leer manuales largos completos (flash-lite admite contexto amplio)
 
 _last_call_ts = [0.0]      # mutable holder for last successful call timestamp
 
@@ -79,7 +79,7 @@ SYSTEM_PROMPT = """Eres un analista experto en seguros de Argentina. Tu tarea es
 
 REGLAS DE EXTRACCIÓN:
 1. RAMAS: Divide la información por ramo (Autos, Motos, Hogar, Comercio, Vida, etc.) según lo que ofrezca cada compañía.
-2. PLANES: Dentro de cada rama, identifica todos los planes comerciales (Terceros, Terceros Completo, Todo Riesgo, etc.).
+2. PLANES: Identifica TODOS los planes comerciales de cada rama SIN OMITIR NINGUNO (típicamente: Responsabilidad Civil/Terceros, Terceros Completo, Todo/Total, Todo Riesgo, y sus variantes). Recorré el manual completo. NO dupliques el mismo plan; si un plan tiene variantes reales (A, B, C, franquicias), creá una entrada por variante con su nombre distintivo. Si una compañía ofrece Terceros Completo o Todo Riesgo, es OBLIGATORIO incluirlos.
 3. VARIANTES: Si un plan tiene variantes (A, B, C, D, Garage u otras), crea una entrada por variante.
 4. GRUPO (solo Autos y Motos): Clasifica cada plan en UNO de estos grupos canónicos según su nivel de cobertura real, aunque el nombre comercial sea un código (ej. "A", "C", "CL MAX"):
    - "RC": solo Responsabilidad Civil / Terceros básico.
