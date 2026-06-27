@@ -48,19 +48,61 @@
 </nav>
 
 <!-- SYNC MODAL -->
-<div x-show="syncing||showSyncLog" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="font-bold text-gray-800">Sincronización</h3>
-      <button x-show="!syncing" @click="showSyncLog=false" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+<div x-show="showSyncLog" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col" style="max-height:90vh">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <div x-show="syncing" class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+        <div x-show="!syncing && syncError" class="w-3 h-3 rounded-full bg-red-500"></div>
+        <div x-show="!syncing && !syncError" class="w-3 h-3 rounded-full bg-blue-500"></div>
+        <h3 class="font-bold text-gray-800" x-text="syncing ? 'Sincronizando...' : 'Sincronización finalizada'"></h3>
+      </div>
+      <button x-show="!syncing" @click="showSyncLog=false;init()" class="text-gray-400 hover:text-gray-500 text-xl leading-none">✕</button>
     </div>
-    <div class="bg-gray-900 rounded-lg p-4 h-56 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
-      <template x-for="l in syncProgress" :key="l"><div x-text="l"></div></template>
-      <div x-show="syncing" class="animate-pulse">▌</div>
+
+    <!-- Progress bar -->
+    <div class="px-6 pt-4 pb-2">
+      <div class="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+        <span x-text="syncCurrent ? '⏳ ' + syncCurrent : (syncing ? 'Iniciando...' : 'Completado')"></span>
+        <span x-text="syncDone + ' / ' + syncTotal"></span>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+        <div class="h-2.5 rounded-full transition-all duration-500"
+             :class="syncError ? 'bg-red-500' : 'bg-emerald-500'"
+             :style="'width:' + (syncTotal > 0 ? Math.round(syncDone/syncTotal*100) : (syncing?5:100)) + '%'"></div>
+      </div>
+      <div class="flex justify-between text-xs text-gray-400 mt-1">
+        <span x-text="syncTotal > 0 ? Math.round(syncDone/syncTotal*100) + '%' : ''"></span>
+        <span x-show="syncTotal > 0" x-text="syncTotal + ' compañías totales'"></span>
+      </div>
     </div>
-    <div x-show="!syncing" class="mt-4 flex justify-end">
-      <button @click="showSyncLog=false;init()" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold">Cerrar y actualizar</button>
+
+    <!-- Log -->
+    <div class="flex-1 overflow-y-auto mx-6 mb-4 bg-gray-950 rounded-xl p-4 font-mono text-xs space-y-1" style="min-height:200px;max-height:360px" x-ref="logBox">
+      <template x-for="(line, i) in syncProgress" :key="i">
+        <div :class="{
+          'text-green-400': line.type==='ok',
+          'text-red-400': line.type==='error',
+          'text-yellow-300': line.type==='processing',
+          'text-gray-400': line.type==='info'
+        }" x-text="line.msg"></div>
+      </template>
+      <div x-show="syncing" class="text-green-400 animate-pulse">▌</div>
     </div>
+
+    <!-- Footer -->
+    <div class="px-6 pb-5 flex items-center justify-between border-t border-gray-100 pt-4">
+      <div x-show="!syncing" class="text-sm" :class="syncError?'text-red-600':'text-emerald-600'"
+           x-text="syncError ? '✗ Terminó con errores' : (syncDone > 0 ? '✓ ' + syncDone + ' compañías procesadas' : '')"></div>
+      <div x-show="syncing" class="text-xs text-gray-400">No cierres esta ventana</div>
+      <button x-show="!syncing" @click="showSyncLog=false;init()"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-semibold transition ml-auto">
+        Cerrar y actualizar
+      </button>
+    </div>
+
   </div>
 </div>
 
@@ -259,6 +301,7 @@ function app(){return{
   compareResult:null, allCoverageKeys:[], selectedCoverageKeys:[], coverageLabels:{},
   coverageSearch:'', currentTitle:'',
   loading:false, syncing:false, syncProgress:[], showSyncLog:false,
+  syncTotal:0, syncDone:0, syncCurrent:'', syncError:null,
   toast:'', showAddUrl:false,
   newCo:{nombre:'',url:'',logo:''},
 
@@ -389,16 +432,35 @@ function app(){return{
   async triggerSync(){
     const r=await api('/sync',{method:'POST'});
     if(!r) return;
-    if(!r.ok){const d=await r.json();this.showToast(d.detail||'Error');return;}
-    this.syncing=true;this.syncProgress=['Iniciando...'];this.showSyncLog=true;
+    if(!r.ok){
+      const d=await r.json();
+      if(r.status===409){
+        // Already running — just show the modal
+        this.showSyncLog=true; this.syncing=true; this.pollSync(); return;
+      }
+      this.showToast(d.detail||'Error'); return;
+    }
+    this.syncing=true;
+    this.syncProgress=[{msg:'Iniciando sincronización...', type:'info'}];
+    this.syncTotal=0; this.syncDone=0; this.syncCurrent=''; this.syncError=null;
+    this.showSyncLog=true;
     this.pollSync();
   },
   async pollSync(){
     const r=await api('/sync/status'); if(!r) return;
     const d=await r.json();
-    this.syncProgress=d.progress;
-    if(d.running) setTimeout(()=>this.pollSync(),2500);
-    else{this.syncing=false;if(d.error) this.syncProgress.push('ERROR: '+d.error);}
+    this.syncProgress=d.progress||[];
+    this.syncTotal=d.total||0;
+    this.syncDone=d.done||0;
+    this.syncCurrent=d.current||'';
+    this.syncError=d.error||null;
+    // Auto-scroll log to bottom
+    this.$nextTick(()=>{
+      const box=this.$refs.logBox;
+      if(box) box.scrollTop=box.scrollHeight;
+    });
+    if(d.running) setTimeout(()=>this.pollSync(),2000);
+    else{ this.syncing=false; }
   },
 
   async addUrlCompany(){

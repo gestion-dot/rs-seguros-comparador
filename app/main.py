@@ -38,10 +38,13 @@ app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 # Sync state
 sync_state = {
     "running": False,
-    "progress": [],
+    "progress": [],   # list of {"msg": str, "type": "info|ok|error|processing"}
     "total": 0,
     "done": 0,
+    "current": "",
     "error": None,
+    "started_at": None,
+    "finished_at": None,
 }
 
 DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "1yCVSrdeMQkn7HI529RkZLaNVGNd3RgEB")
@@ -256,6 +259,10 @@ def save_extracted_data(data: dict, db: Session):
     db.commit()
 
 
+def log_sync(msg: str, kind: str = "info"):
+    sync_state["progress"].append({"msg": msg, "type": kind})
+
+
 def run_sync(db_session_factory):
     from .database import SessionLocal
     db = SessionLocal()
@@ -264,22 +271,27 @@ def run_sync(db_session_factory):
         sync_state["progress"] = []
         sync_state["error"] = None
         sync_state["done"] = 0
+        sync_state["total"] = 0
+        sync_state["current"] = ""
+        sync_state["started_at"] = datetime.utcnow().isoformat()
+        sync_state["finished_at"] = None
 
         # 1. Sync Drive folders
-        sync_state["progress"].append("Conectando con Google Drive...")
+        log_sync("🔌 Conectando con Google Drive...", "info")
         try:
             subfolders = list_subfolders(DRIVE_FOLDER_ID)
+            log_sync(f"✓ Drive: {len(subfolders)} carpetas encontradas", "ok")
         except Exception as e:
-            sync_state["progress"].append(f"Error Drive: {e}")
+            log_sync(f"✗ Error Drive: {e}", "error")
             subfolders = []
 
-        # 2. Sync URL-based companies
+        # 2. URL-based companies
         url_companies = db.query(Company).filter(Company.fuente == "url", Company.activa == True).all()
+        if url_companies:
+            log_sync(f"🌐 {len(url_companies)} compañía(s) por URL", "info")
 
         all_tasks = [("drive", f) for f in subfolders] + [("url", c) for c in url_companies]
         sync_state["total"] = len(all_tasks)
-
-        # Mark all Drive companies as candidates for deactivation
         drive_names_in_drive = {f["name"].upper() for f in subfolders}
 
         for fuente, item in all_tasks:
@@ -287,9 +299,9 @@ def run_sync(db_session_factory):
                 if fuente == "drive":
                     company_name = item["name"]
                     folder_id = item["id"]
-                    sync_state["progress"].append(f"Procesando {company_name}...")
+                    sync_state["current"] = company_name
+                    log_sync(f"⏳ {company_name}: descargando manual...", "processing")
 
-                    # Ensure company record exists
                     company = db.query(Company).filter(Company.nombre == company_name).first()
                     if not company:
                         company = Company(nombre=company_name, fuente="drive", drive_folder_id=folder_id)
@@ -303,38 +315,43 @@ def run_sync(db_session_factory):
 
                     pdf_path = get_file_content_as_pdf_path(folder_id, company_name)
                     if not pdf_path:
-                        sync_state["progress"].append(f"  {company_name}: sin archivo")
+                        log_sync(f"⚠ {company_name}: sin archivo en la carpeta", "error")
+                        sync_state["done"] += 1
                         continue
 
+                    log_sync(f"🤖 {company_name}: analizando con IA...", "processing")
                     data = extract_from_pdf(pdf_path, company_name)
                     save_extracted_data(data, db)
                     db.query(Company).filter(Company.nombre == company_name).update({"activa": True})
                     db.commit()
 
+                    ramas = [r.get("rama","?") for r in data.get("ramas",[])]
+                    log_sync(f"✓ {company_name}: OK ({', '.join(ramas)})", "ok")
                     log = SyncLog(company_nombre=company_name, accion="updated", detalle="Drive sync")
                     db.add(log)
                     db.commit()
-                    sync_state["progress"].append(f"  {company_name}: OK")
 
-                else:  # url
+                else:
                     company = item
-                    sync_state["progress"].append(f"Procesando {company.nombre} (URL)...")
+                    sync_state["current"] = company.nombre
+                    log_sync(f"⏳ {company.nombre}: leyendo URL...", "processing")
                     text = extract_text_from_url(company.url_manual)
+                    log_sync(f"🤖 {company.nombre}: analizando con IA...", "processing")
                     data = extract_from_text(text, company.nombre)
                     save_extracted_data(data, db)
                     db.query(Company).filter(Company.id == company.id).update({
-                        "ultima_sync": datetime.utcnow(),
-                        "activa": True,
+                        "ultima_sync": datetime.utcnow(), "activa": True,
                     })
                     db.commit()
+                    ramas = [r.get("rama","?") for r in data.get("ramas",[])]
+                    log_sync(f"✓ {company.nombre}: OK ({', '.join(ramas)})", "ok")
                     log = SyncLog(company_nombre=company.nombre, accion="updated", detalle="URL sync")
                     db.add(log)
                     db.commit()
-                    sync_state["progress"].append(f"  {company.nombre}: OK")
 
             except Exception as e:
                 name = item["name"] if fuente == "drive" else item.nombre
-                sync_state["progress"].append(f"  {name}: ERROR - {e}")
+                log_sync(f"✗ {name}: ERROR — {str(e)[:120]}", "error")
                 log = SyncLog(company_nombre=name, accion="error", detalle=str(e))
                 db.add(log)
                 db.commit()
@@ -351,13 +368,18 @@ def run_sync(db_session_factory):
                 db.add(log)
                 db.commit()
 
-        sync_state["progress"].append("✓ Sincronización completada")
+        ok = sum(1 for p in sync_state["progress"] if p["type"] == "ok")
+        err = sum(1 for p in sync_state["progress"] if p["type"] == "error")
+        log_sync(f"✅ Sincronización completada — {ok} OK / {err} con errores", "ok")
+        sync_state["current"] = ""
         sync_state["running"] = False
+        sync_state["finished_at"] = datetime.utcnow().isoformat()
 
     except Exception as e:
         sync_state["error"] = str(e)
         sync_state["running"] = False
-        sync_state["progress"].append(f"Error fatal: {e}")
+        sync_state["finished_at"] = datetime.utcnow().isoformat()
+        log_sync(f"✗ Error fatal: {e}", "error")
     finally:
         db.close()
 
@@ -377,8 +399,11 @@ def sync_status(_=Depends(verify_token)):
         "running": sync_state["running"],
         "total": sync_state["total"],
         "done": sync_state["done"],
-        "progress": sync_state["progress"][-20:],
+        "current": sync_state["current"],
+        "progress": sync_state["progress"],   # full log, frontend paginates
         "error": sync_state["error"],
+        "started_at": sync_state["started_at"],
+        "finished_at": sync_state["finished_at"],
     }
 
 
