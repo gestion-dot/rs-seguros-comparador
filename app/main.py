@@ -31,7 +31,9 @@ app.add_middleware(
 
 # Static files
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
+assets_dir = FRONTEND_DIR / "assets"
+assets_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
 # Sync state
 sync_state = {
