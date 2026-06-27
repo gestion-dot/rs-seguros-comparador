@@ -11,3 +11,4 @@ google-generativeai
 python-dotenv
 aiofiles
 httpx
+psycopg2-binary

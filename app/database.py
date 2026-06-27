@@ -4,10 +4,20 @@ from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 
 import os
-_db_path = os.getenv("DATABASE_PATH", "./seguros.db")
-DATABASE_URL = f"sqlite:///{_db_path}"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Prefer a durable external database (Postgres) if DATABASE_URL is set;
+# otherwise fall back to local SQLite (ephemeral on Render free tier).
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    # SQLAlchemy needs the "postgresql://" scheme (Neon/Supabase often give "postgres://")
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+else:
+    _db_path = os.getenv("DATABASE_PATH", "./seguros.db")
+    DATABASE_URL = f"sqlite:///{_db_path}"
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
