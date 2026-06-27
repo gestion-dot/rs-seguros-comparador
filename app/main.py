@@ -263,7 +263,18 @@ def log_sync(msg: str, kind: str = "info"):
     sync_state["progress"].append({"msg": msg, "type": kind})
 
 
-def run_sync(db_session_factory):
+def _company_has_data(db, company_name: str) -> bool:
+    """True if the company already has at least one extracted plan (so we can skip it)."""
+    company = db.query(Company).filter(Company.nombre == company_name).first()
+    if not company:
+        return False
+    for branch in company.branches:
+        if branch.plans:
+            return True
+    return False
+
+
+def run_sync(db_session_factory, force: bool = False):
     from .database import SessionLocal
     db = SessionLocal()
     try:
@@ -300,7 +311,6 @@ def run_sync(db_session_factory):
                     company_name = item["name"]
                     folder_id = item["id"]
                     sync_state["current"] = company_name
-                    log_sync(f"⏳ {company_name}: descargando manual...", "processing")
 
                     company = db.query(Company).filter(Company.nombre == company_name).first()
                     if not company:
@@ -313,6 +323,14 @@ def run_sync(db_session_factory):
                         company.fuente = "drive"
                         db.commit()
 
+                    if not force and _company_has_data(db, company_name):
+                        log_sync(f"⏭ {company_name}: ya cargada, se omite", "info")
+                        db.query(Company).filter(Company.nombre == company_name).update({"activa": True})
+                        db.commit()
+                        sync_state["done"] += 1
+                        continue
+
+                    log_sync(f"⏳ {company_name}: descargando manual...", "processing")
                     pdf_path = get_file_content_as_pdf_path(folder_id, company_name)
                     if not pdf_path:
                         log_sync(f"⚠ {company_name}: sin archivo en la carpeta", "error")
@@ -334,6 +352,10 @@ def run_sync(db_session_factory):
                 else:
                     company = item
                     sync_state["current"] = company.nombre
+                    if not force and _company_has_data(db, company.nombre):
+                        log_sync(f"⏭ {company.nombre}: ya cargada, se omite", "info")
+                        sync_state["done"] += 1
+                        continue
                     log_sync(f"⏳ {company.nombre}: leyendo URL...", "processing")
                     text = extract_text_from_url(company.url_manual)
                     log_sync(f"🤖 {company.nombre}: analizando con IA...", "processing")
@@ -385,12 +407,13 @@ def run_sync(db_session_factory):
 
 
 @app.post("/sync")
-def trigger_sync(_=Depends(verify_token)):
+def trigger_sync(force: bool = False, _=Depends(verify_token)):
     if sync_state["running"]:
         raise HTTPException(status_code=409, detail="Sincronización en curso")
-    thread = threading.Thread(target=run_sync, args=(None,), daemon=True)
+    thread = threading.Thread(target=run_sync, args=(None,), kwargs={"force": force}, daemon=True)
     thread.start()
-    return {"message": "Sincronización iniciada"}
+    modo = "completa" if force else "incremental"
+    return {"message": f"Sincronización {modo} iniciada"}
 
 
 @app.get("/sync/status")
