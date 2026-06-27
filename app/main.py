@@ -123,6 +123,45 @@ def get_ramas(db: Session = Depends(get_db), _=Depends(verify_token)):
     return sorted({b.rama for b in branches})
 
 
+def _rama_es_vehiculo(rama: str) -> bool:
+    n = _normalizar(rama)
+    return "auto" in n or "moto" in n or "vehiculo" in n
+
+
+def _normalizar(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return s.lower().strip()
+
+
+# Grupos canónicos de planes para Autos/Motos (orden = prioridad de clasificación)
+GRUPOS_VEHICULO = ["Todo Riesgo", "Garage", "Terceros Completo", "Todo/Total", "RC"]
+
+
+def clasificar_grupo(nombre_plan: str) -> Optional[str]:
+    """Mapea el nombre comercial de un plan a uno de los grupos canónicos."""
+    n = _normalizar(nombre_plan)
+    if not n:
+        return None
+    if "todo riesgo" in n or "todoriesgo" in n or "todo-riesgo" in n:
+        return "Todo Riesgo"
+    if "garage" in n or "garaje" in n:
+        return "Garage"
+    if "terceros completo" in n or "tercero completo" in n or "terc. completo" in n or "completo" in n:
+        return "Terceros Completo"
+    if "total" in n:
+        return "Todo/Total"
+    if (
+        "rc" in n.split()
+        or "responsabilidad civil" in n
+        or "terceros" in n
+        or "tercero" in n
+        or "basic" in n
+    ):
+        return "RC"
+    return None
+
+
 @app.get("/planes")
 def get_planes(rama: str, db: Session = Depends(get_db), _=Depends(verify_token)):
     """Get all distinct plan names for a given branch."""
@@ -142,16 +181,39 @@ def get_planes(rama: str, db: Session = Depends(get_db), _=Depends(verify_token)
     return result
 
 
+@app.get("/grupos")
+def get_grupos(rama: str, db: Session = Depends(get_db), _=Depends(verify_token)):
+    """Devuelve los grupos canónicos de plan disponibles para una rama de vehículos."""
+    if not _rama_es_vehiculo(rama):
+        return []
+    plans = (
+        db.query(Plan.nombre_plan, Plan.grupo)
+        .join(Branch)
+        .filter(Branch.rama == rama)
+        .distinct()
+        .all()
+    )
+    presentes = set()
+    for nombre, grupo in plans:
+        g = grupo or clasificar_grupo(nombre)
+        if g:
+            presentes.add(g)
+    # Mantener el orden canónico de presentación
+    orden = ["RC", "Garage", "Todo/Total", "Terceros Completo", "Todo Riesgo"]
+    return [g for g in orden if g in presentes]
+
+
 @app.get("/compare")
 def compare(
     rama: str,
-    plan: str,
     companies: str,
+    plan: Optional[str] = None,
+    grupo: Optional[str] = None,
     variante: Optional[str] = None,
     db: Session = Depends(get_db),
     _=Depends(verify_token),
 ):
-    """Compare a specific plan across selected companies."""
+    """Compara compañías por plan exacto o por grupo canónico (Autos/Motos)."""
     company_ids = [int(x) for x in companies.split(",") if x.strip()]
 
     result = {}
@@ -167,10 +229,20 @@ def compare(
             result[str(cid)] = {"nombre": company.nombre, "logo_url": company.logo_url, "coberturas": {}}
             continue
 
-        query = db.query(Plan).filter(Plan.branch_id == branch.id, Plan.nombre_plan == plan)
-        if variante:
-            query = query.filter(Plan.variante == variante)
-        plan_obj = query.first()
+        plan_obj = None
+        if grupo:
+            # Elegir el plan representativo de la compañía que caiga en este grupo
+            candidatos = db.query(Plan).filter(Plan.branch_id == branch.id).all()
+            del_grupo = [p for p in candidatos if (p.grupo or clasificar_grupo(p.nombre_plan)) == grupo]
+            if variante:
+                preferidos = [p for p in del_grupo if p.variante == variante]
+                del_grupo = preferidos or del_grupo
+            plan_obj = del_grupo[0] if del_grupo else None
+        else:
+            query = db.query(Plan).filter(Plan.branch_id == branch.id, Plan.nombre_plan == plan)
+            if variante:
+                query = query.filter(Plan.variante == variante)
+            plan_obj = query.first()
 
         if not plan_obj:
             result[str(cid)] = {"nombre": company.nombre, "logo_url": company.logo_url, "coberturas": {}}
@@ -184,6 +256,7 @@ def compare(
         result[str(cid)] = {
             "nombre": company.nombre,
             "logo_url": company.logo_url,
+            "plan_real": plan_obj.nombre_plan,
             "particularidades": plan_obj.particularidades,
             "coberturas": coberturas,
         }
@@ -244,10 +317,13 @@ def save_extracted_data(data: dict, db: Session, company: Optional[Company] = No
         db.flush()
 
         for plan_data in rama_data.get("planes", []):
+            nombre_plan = plan_data.get("nombre_plan", "")
+            grupo = plan_data.get("grupo") or clasificar_grupo(nombre_plan)
             plan = Plan(
                 branch_id=branch.id,
-                nombre_plan=plan_data.get("nombre_plan", ""),
+                nombre_plan=nombre_plan,
                 variante=plan_data.get("variante"),
+                grupo=grupo,
                 particularidades=plan_data.get("particularidades"),
             )
             db.add(plan)

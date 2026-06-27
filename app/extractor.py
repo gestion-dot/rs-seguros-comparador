@@ -81,7 +81,14 @@ REGLAS DE EXTRACCIÓN:
 1. RAMAS: Divide la información por ramo (Autos, Motos, Hogar, Comercio, Vida, etc.) según lo que ofrezca cada compañía.
 2. PLANES: Dentro de cada rama, identifica todos los planes comerciales (Terceros, Terceros Completo, Todo Riesgo, etc.).
 3. VARIANTES: Si un plan tiene variantes (A, B, C, D, Garage u otras), crea una entrada por variante.
-4. COBERTURAS: Incluye TODAS las coberturas mencionadas para cada plan. Los 8 campos estándar van con claves canónicas; cualquier cobertura adicional se agrega con su nombre original.
+4. GRUPO (solo Autos y Motos): Clasifica cada plan en UNO de estos grupos canónicos según su nivel de cobertura real, aunque el nombre comercial sea un código (ej. "A", "C", "CL MAX"):
+   - "RC": solo Responsabilidad Civil / Terceros básico.
+   - "Garage": cobertura de robo/incendio en garaje.
+   - "Todo/Total": Terceros con Robo/Incendio/Destrucción Total (sin llegar a Todo Riesgo).
+   - "Terceros Completo": Terceros Completo y sus variantes.
+   - "Todo Riesgo": Todo Riesgo con o sin franquicia.
+   Para otras ramas (Hogar, etc.) usa "grupo": null.
+5. COBERTURAS: Incluye TODAS las coberturas mencionadas para cada plan. Los 8 campos estándar van con claves canónicas; cualquier cobertura adicional se agrega con su nombre original.
 5. FIDELIDAD: Extrae solo información explícita. No asumas ni inventes coberturas.
 6. VALORES AUSENTES: Si una cobertura no se menciona para un plan, el valor debe ser "No incluye" o "No especificado".
 7. LÍMITES Y FRANQUICIAS: Inclúyelos en la descripción (ej: "Sí - Franquicia 10%", "Sí - Límite 3 eventos anuales").
@@ -107,6 +114,7 @@ Tu respuesta debe ser ESTRICTAMENTE un objeto JSON válido con esta estructura:
         {
           "nombre_plan": "Todo Riesgo",
           "variante": "A",
+          "grupo": "Todo Riesgo",
           "coberturas": {
             "responsabilidad_civil": "...",
             "robo_hurto": "...",

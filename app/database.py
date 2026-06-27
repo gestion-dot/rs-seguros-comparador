@@ -51,6 +51,7 @@ class Plan(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"))
     nombre_plan = Column(String)
     variante = Column(String, nullable=True)
+    grupo = Column(String, nullable=True)  # grupo canónico (RC, Garage, Todo Riesgo, etc.)
     particularidades = Column(Text, nullable=True)
     branch = relationship("Branch", back_populates="plans")
     coverages = relationship("Coverage", back_populates="plan", cascade="all, delete-orphan")
@@ -85,3 +86,11 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Migración ligera: agregar columna 'grupo' a tablas ya existentes (Postgres)
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS grupo VARCHAR"))
+            conn.commit()
+    except Exception:
+        pass  # SQLite u otra DB: la columna ya viene de create_all

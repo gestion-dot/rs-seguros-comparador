@@ -120,43 +120,75 @@
 
     <div class="p-4 space-y-5 flex-1">
 
-      <!-- Rama -->
+      <!-- 1 · COMPAÑÍAS -->
       <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Ramo</label>
-        <select id="sel-rama" placeholder="Buscar ramo..."></select>
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          1 · Compañías
+          <span class="text-blue-600 font-normal" x-text="selectedCompanies.length > 0 ? '('+selectedCompanies.length+' sel.)' : ''"></span>
+        </label>
+        <input x-model="companySearch" type="text" placeholder="Buscar compañía..."
+          class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <!-- Todas -->
+        <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-blue-50 hover:bg-blue-100 mb-1">
+          <input type="checkbox" :checked="allCompaniesSelected" @change="toggleAllCompanies()" class="rounded text-blue-600">
+          <span class="text-xs font-bold text-blue-700">Todas las compañías</span>
+        </label>
+        <div class="space-y-0.5 max-h-56 overflow-y-auto border border-gray-100 rounded-lg p-1">
+          <template x-for="c in filteredCompanies" :key="c.id">
+            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+              <input type="checkbox" :checked="selectedCompanies.includes(c.id)"
+                @change="toggleCompany(c.id)" class="rounded text-blue-600">
+              <span class="text-xs text-gray-700" x-text="c.nombre"></span>
+            </label>
+          </template>
+          <p x-show="filteredCompanies.length===0" class="text-xs text-gray-400 p-2">Sin resultados</p>
+        </div>
       </div>
 
-      <!-- Plan -->
-      <div x-show="selectedRama">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Plan</label>
-        <select id="sel-plan" placeholder="Buscar plan..."></select>
-      </div>
-
-      <!-- Variante -->
-      <div x-show="variantes.length > 0">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Variante</label>
+      <!-- 2 · RAMA (selección única) -->
+      <div x-show="selectedCompanies.length > 0">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">2 · Rama</label>
         <div class="flex flex-wrap gap-1.5">
-          <button @click="selectedVariante=''" :class="selectedVariante===''?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="px-3 py-1 rounded-full text-xs font-medium transition">Todas</button>
-          <template x-for="v in variantes" :key="v">
-            <button @click="selectedVariante=v" :class="selectedVariante===v?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-              class="px-3 py-1 rounded-full text-xs font-medium transition" x-text="v"></button>
+          <template x-for="r in ramas" :key="r">
+            <button @click="selectRama(r)"
+              :class="selectedRama===r?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="r"></button>
           </template>
         </div>
       </div>
 
-      <!-- Compañías -->
-      <div x-show="selectedPlan">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-          Compañías <span class="text-blue-600 font-normal" x-text="selectedCompanies.length > 0 ? '('+selectedCompanies.length+' sel.)' : ''"></span>
-        </label>
-        <select id="sel-companies" multiple placeholder="Buscar compañía..."></select>
-        <div class="flex gap-3 mt-2">
-          <button @click="selectAllCompanies()" class="text-xs text-blue-600 hover:underline">Todas</button>
-          <span class="text-gray-200">|</span>
-          <button @click="clearCompanies()" class="text-xs text-gray-400 hover:underline">Ninguna</button>
+      <!-- 3a · GRUPO DE COBERTURA (solo Autos/Motos) -->
+      <div x-show="selectedRama && esVehiculo">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">3 · Tipo de cobertura</label>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="g in grupos" :key="g">
+            <button @click="selectGrupo(g)"
+              :class="selectedGrupo===g?'bg-emerald-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="g"></button>
+          </template>
         </div>
+        <p x-show="grupos.length===0" class="text-xs text-gray-400 mt-1">No se detectaron grupos de cobertura en los manuales de esta rama.</p>
       </div>
+
+      <!-- 3b · PLAN (ramas que no son vehículos) -->
+      <div x-show="selectedRama && !esVehiculo">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">3 · Plan</label>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="p in planNames" :key="p">
+            <button @click="selectPlan(p)"
+              :class="selectedPlan===p?'bg-emerald-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="p"></button>
+          </template>
+        </div>
+        <p x-show="planNames.length===0" class="text-xs text-gray-400 mt-1">No hay planes para esta rama.</p>
+      </div>
+
+      <!-- Compare button -->
+      <button x-show="canCompare" @click="compare()" :disabled="loading"
+        class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
+        <span x-show="!loading">Ver comparativa →</span>
+        <span x-show="loading">Cargando...</span>
+      </button>
 
       <!-- Coberturas filter (visible after compare) -->
       <div x-show="allCoverageKeys.length > 0">
@@ -178,13 +210,6 @@
           <button @click="selectedCoverageKeys=[]" class="text-xs text-gray-400 hover:underline">Ninguna</button>
         </div>
       </div>
-
-      <!-- Compare button -->
-      <button x-show="selectedCompanies.length>=1&&selectedPlan" @click="compare()" :disabled="loading"
-        class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
-        <span x-show="!loading">Ver comparativa →</span>
-        <span x-show="loading">Cargando...</span>
-      </button>
     </div>
 
     <!-- Add URL company -->
@@ -210,7 +235,7 @@
       <svg class="w-16 h-16 mb-4 opacity-25" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/>
       </svg>
-      <p class="text-base font-medium text-gray-500">Seleccioná ramo, plan y compañías para comparar</p>
+      <p class="text-base font-medium text-gray-500">Elegí compañías, luego la rama y el tipo de cobertura</p>
       <p class="text-sm mt-1 text-gray-400" x-show="companies.length===0">Si la base está vacía, primero hacé clic en <strong>Sincronizar</strong></p>
     </div>
 
@@ -246,6 +271,7 @@
                     </template>
                     <div class="logo-fb" :style="cd.logo_url?'display:none':'display:flex'" x-text="cd.nombre.substring(0,6)"></div>
                     <span class="text-xs font-bold text-white" x-text="cd.nombre"></span>
+                    <span class="text-[10px] font-normal text-slate-300 leading-tight" x-show="cd.plan_real" x-text="cd.plan_real"></span>
                   </div>
                 </th>
               </template>
@@ -292,12 +318,12 @@ async function api(path,opts={}){
   return r;
 }
 
-// Tom Select instances
-let tsRama,tsPlan,tsCompanies;
-
 function app(){return{
-  companies:[], ramas:[], planes:{}, variantes:[],
-  selectedRama:'', selectedPlan:'', selectedVariante:'', selectedCompanies:[],
+  companies:[], ramas:[],
+  companySearch:'', selectedCompanies:[],
+  selectedRama:'', esVehiculo:false,
+  grupos:[], selectedGrupo:'',
+  planNames:[], selectedPlan:'',
   compareResult:null, allCoverageKeys:[], selectedCoverageKeys:[], coverageLabels:{},
   coverageSearch:'', currentTitle:'',
   loading:false, syncing:false, syncProgress:[], showSyncLog:false,
@@ -305,6 +331,16 @@ function app(){return{
   toast:'', showAddUrl:false,
   newCo:{nombre:'',url:'',logo:''},
 
+  get filteredCompanies(){
+    const q=this.companySearch.toLowerCase();
+    return this.companies.filter(c=>c.nombre.toLowerCase().includes(q));
+  },
+  get allCompaniesSelected(){
+    return this.companies.length>0 && this.selectedCompanies.length===this.companies.length;
+  },
+  get canCompare(){
+    return this.selectedCompanies.length>=1 && (this.selectedGrupo || this.selectedPlan);
+  },
   get filteredCoverageKeys(){
     const q=this.coverageSearch.toLowerCase();
     return this.allCoverageKeys.filter(k=>(this.coverageLabels[k]||k).toLowerCase().includes(q));
@@ -313,7 +349,6 @@ function app(){return{
   async init(){
     if(!token()){window.location.href='/';return;}
     await Promise.all([this.loadCompanies(), this.loadRamas()]);
-    this.$nextTick(()=>this.initSelects());
   },
 
   async loadCompanies(){
@@ -323,88 +358,53 @@ function app(){return{
     const r=await api('/ramas'); if(r&&r.ok) this.ramas=await r.json();
   },
 
-  initSelects(){
-    // Rama select
-    if(tsRama) tsRama.destroy();
-    tsRama=new TomSelect('#sel-rama',{
-      options:this.ramas.map(r=>({value:r,text:r})),
-      placeholder:'Buscar ramo...',
-      onChange:v=>{this.selectedRama=v;this.onRamaChange();}
-    });
-
-    // Plan select (empty initially)
-    if(tsPlan) tsPlan.destroy();
-    tsPlan=new TomSelect('#sel-plan',{
-      placeholder:'Seleccioná primero un ramo...',
-      onChange:v=>{this.selectedPlan=v;this.onPlanChange();}
-    });
-
-    // Companies multiselect
-    if(tsCompanies) tsCompanies.destroy();
-    tsCompanies=new TomSelect('#sel-companies',{
-      options:this.companies.map(c=>({value:String(c.id),text:c.nombre})),
-      plugins:['checkbox_options','remove_button'],
-      placeholder:'Buscar compañía...',
-      maxItems:null,
-      onChange:vals=>{ this.selectedCompanies=vals.map(Number); }
-    });
+  // 1 · Compañías
+  toggleCompany(id){
+    const i=this.selectedCompanies.indexOf(id);
+    if(i>=0) this.selectedCompanies.splice(i,1);
+    else this.selectedCompanies.push(id);
+    this.compareResult=null;
+  },
+  toggleAllCompanies(){
+    if(this.allCompaniesSelected) this.selectedCompanies=[];
+    else this.selectedCompanies=this.companies.map(c=>c.id);
+    this.compareResult=null;
   },
 
-  async onRamaChange(){
-    this.selectedPlan='';this.selectedVariante='';this.selectedCompanies=[];
-    this.planes={};this.compareResult=null;
-    if(!this.selectedRama) return;
-
-    const r=await api('/planes?rama='+encodeURIComponent(this.selectedRama));
-    if(r&&r.ok) this.planes=await r.json();
-
-    // Update plan select
-    if(tsPlan){
-      tsPlan.clear();tsPlan.clearOptions();
-      Object.keys(this.planes).forEach(n=>tsPlan.addOption({value:n,text:n}));
-      tsPlan.refreshOptions(false);
-    }
-
-    // Update companies to only those with this rama
-    const filtered=this.companies.filter(c=>c.ramas.includes(this.selectedRama));
-    if(tsCompanies){
-      tsCompanies.clear();tsCompanies.clearOptions();
-      filtered.forEach(c=>tsCompanies.addOption({value:String(c.id),text:c.nombre}));
-      tsCompanies.refreshOptions(false);
+  // 2 · Rama
+  async selectRama(r){
+    this.selectedRama=r;
+    this.selectedGrupo=''; this.selectedPlan='';
+    this.grupos=[]; this.planNames=[]; this.compareResult=null;
+    this.esVehiculo=/auto|moto|veh/i.test(r);
+    if(this.esVehiculo){
+      const resp=await api('/grupos?rama='+encodeURIComponent(r));
+      if(resp&&resp.ok) this.grupos=await resp.json();
+    }else{
+      const resp=await api('/planes?rama='+encodeURIComponent(r));
+      if(resp&&resp.ok) this.planNames=Object.keys(await resp.json());
     }
   },
 
-  onPlanChange(){
-    this.selectedVariante='';this.compareResult=null;
-    this.variantes=this.planes[this.selectedPlan]||[];
-  },
-
-  selectAllCompanies(){
-    const filtered=this.companies.filter(c=>!this.selectedRama||c.ramas.includes(this.selectedRama));
-    if(tsCompanies){
-      tsCompanies.clear();
-      filtered.forEach(c=>tsCompanies.addItem(String(c.id)));
-    }
-    this.selectedCompanies=filtered.map(c=>c.id);
-  },
-  clearCompanies(){
-    if(tsCompanies) tsCompanies.clear();
-    this.selectedCompanies=[];
-  },
+  // 3 · Grupo / Plan
+  selectGrupo(g){ this.selectedGrupo=g; this.selectedPlan=''; this.compareResult=null; },
+  selectPlan(p){ this.selectedPlan=p; this.selectedGrupo=''; this.compareResult=null; },
 
   async compare(){
-    if(!this.selectedPlan||this.selectedCompanies.length===0) return;
+    if(!this.canCompare) return;
     this.loading=true;
     try{
-      let url=`/compare?rama=${encodeURIComponent(this.selectedRama)}&plan=${encodeURIComponent(this.selectedPlan)}&companies=${this.selectedCompanies.join(',')}`;
-      if(this.selectedVariante) url+=`&variante=${encodeURIComponent(this.selectedVariante)}`;
+      let url=`/compare?rama=${encodeURIComponent(this.selectedRama)}&companies=${this.selectedCompanies.join(',')}`;
+      if(this.selectedGrupo) url+=`&grupo=${encodeURIComponent(this.selectedGrupo)}`;
+      else if(this.selectedPlan) url+=`&plan=${encodeURIComponent(this.selectedPlan)}`;
       const r=await api(url); if(!r||!r.ok) return;
       const data=await r.json();
       this.compareResult=data;
       this.coverageLabels=data.coverage_keys||{};
       this.allCoverageKeys=Object.keys(data.coverage_keys||{});
       this.selectedCoverageKeys=[...this.allCoverageKeys];
-      this.currentTitle=`${this.selectedRama} · ${this.selectedPlan}`+(this.selectedVariante?` · ${this.selectedVariante}`:'');
+      const tipo=this.selectedGrupo||this.selectedPlan;
+      this.currentTitle=`${this.selectedRama} · ${tipo}`;
     }finally{this.loading=false;}
   },
 
