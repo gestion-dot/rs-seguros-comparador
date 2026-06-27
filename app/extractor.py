@@ -7,7 +7,10 @@ from pathlib import Path
 import google.generativeai as genai
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash")
+# El modelo se puede cambiar por env var. flash-lite tiene una cuota diaria
+# gratuita separada (y más alta) que gemini-2.5-flash.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+model = genai.GenerativeModel(MODEL_NAME)
 
 # Throttling / retry config (free-tier Gemini rate limits)
 MAX_RETRIES = 3

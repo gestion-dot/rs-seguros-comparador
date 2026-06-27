@@ -301,7 +301,9 @@ def run_sync(db_session_factory, force: bool = False):
         if url_companies:
             log_sync(f"🌐 {len(url_companies)} compañía(s) por URL", "info")
 
-        all_tasks = [("drive", f) for f in subfolders] + [("url", c) for c in url_companies]
+        # URL sources first (e.g. LES / La Equidad) so they're guaranteed to load
+        # before the larger Drive batch can exhaust the daily AI quota.
+        all_tasks = [("url", c) for c in url_companies] + [("drive", f) for f in subfolders]
         sync_state["total"] = len(all_tasks)
         drive_names_in_drive = {f["name"].upper() for f in subfolders}
 
