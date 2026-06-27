@@ -88,20 +88,12 @@ REGLAS DE EXTRACCIÓN:
    - "Terceros Completo": Terceros Completo y sus variantes.
    - "Todo Riesgo": Todo Riesgo con o sin franquicia.
    Para otras ramas (Hogar, etc.) usa "grupo": null.
-5. COBERTURAS: Incluye TODAS las coberturas mencionadas para cada plan. Los 8 campos estándar van con claves canónicas; cualquier cobertura adicional se agrega con su nombre original.
-5. FIDELIDAD: Extrae solo información explícita. No asumas ni inventes coberturas.
-6. VALORES AUSENTES: Si una cobertura no se menciona para un plan, el valor debe ser "No incluye" o "No especificado".
-7. LÍMITES Y FRANQUICIAS: Inclúyelos en la descripción (ej: "Sí - Franquicia 10%", "Sí - Límite 3 eventos anuales").
-
-CLAVES ESTÁNDAR (usar exactamente estas):
-- responsabilidad_civil
-- robo_hurto
-- incendio
-- destruccion_total
-- danos_parciales
-- granizo
-- cristales_cerraduras
-- auxilio_mecanico
+5. COBERTURAS (EXHAUSTIVIDAD OBLIGATORIA): Lista ABSOLUTAMENTE TODAS las coberturas, beneficios, servicios, cláusulas adicionales y adicionales opcionales que el manual mencione para cada plan. NO te limites a las 8 estándar. Cada cobertura adicional se agrega con su PROPIA clave en snake_case usando su nombre real (NO uses una clave genérica como "cobertura_adicional"). Es preferible incluir de más que omitir algo.
+   Ejemplos de coberturas adicionales frecuentes en Autos/Motos que debés buscar e incluir si aparecen: asistencia_al_vehiculo, auxilio_mecanico, remolque_grua, auto_sustituto, taller_oficial, gestoria_tramites, responsabilidad_civil_paises_limitrofes, granizo, inundacion, terremoto, accidentes_personales_conductor, muerte_invalidez, gastos_medicos, gastos_sepelio, cobertura_neumaticos, llanta_robada, robo_ruedas, accesorios_gnc, equipaje, cristales, cerraduras, danio_por_intento_robo, asistencia_juridica, asistencia_al_hogar, asistencia_al_viajero, ambulancia, cobertura_granizo_full, cobertura_0km, valor_a_nuevo. (La lista es orientativa: incluí cualquier otra que figure.)
+6. CLAVES ESTÁNDAR: Para estas 8 coberturas usá EXACTAMENTE estas claves: responsabilidad_civil, robo_hurto, incendio, destruccion_total, danos_parciales, granizo, cristales_cerraduras, auxilio_mecanico. El resto, con su nombre real en snake_case.
+7. FIDELIDAD: Extrae solo información explícita. No asumas ni inventes coberturas.
+8. VALORES AUSENTES: Si una cobertura no se menciona para un plan, el valor debe ser "No incluye" o "No especificado".
+9. LÍMITES Y FRANQUICIAS: Inclúyelos en la descripción (ej: "Sí - Franquicia 10%", "Sí - Límite 3 eventos anuales").
 
 Tu respuesta debe ser ESTRICTAMENTE un objeto JSON válido con esta estructura:
 {
@@ -116,15 +108,18 @@ Tu respuesta debe ser ESTRICTAMENTE un objeto JSON válido con esta estructura:
           "variante": "A",
           "grupo": "Todo Riesgo",
           "coberturas": {
-            "responsabilidad_civil": "...",
-            "robo_hurto": "...",
-            "incendio": "...",
-            "destruccion_total": "...",
-            "danos_parciales": "...",
-            "granizo": "...",
-            "cristales_cerraduras": "...",
-            "auxilio_mecanico": "...",
-            "cobertura_adicional": "..."
+            "responsabilidad_civil": "Sí - hasta $X",
+            "robo_hurto": "Sí - total y parcial",
+            "incendio": "Sí",
+            "destruccion_total": "Sí",
+            "danos_parciales": "Sí - franquicia 4%",
+            "granizo": "Sí",
+            "cristales_cerraduras": "Sí",
+            "auxilio_mecanico": "Sí - 4 servicios/año",
+            "auto_sustituto": "Sí - hasta 15 días",
+            "taller_oficial": "Sí",
+            "accidentes_personales_conductor": "Sí - $2.000.000",
+            "responsabilidad_civil_paises_limitrofes": "Sí"
           },
           "particularidades": "Máximo 2 oraciones."
         }

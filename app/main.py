@@ -213,10 +213,10 @@ def compare(
     db: Session = Depends(get_db),
     _=Depends(verify_token),
 ):
-    """Compara compañías por plan exacto o por grupo canónico (Autos/Motos)."""
+    """Compara compañías por grupo (una columna por cada plan que encuadre) o por plan exacto."""
     company_ids = [int(x) for x in companies.split(",") if x.strip()]
 
-    result = {}
+    columns = []          # una entrada por PLAN (= columna de la tabla)
     all_coverage_keys = {}  # key -> label
 
     for cid in company_ids:
@@ -226,50 +226,43 @@ def compare(
 
         branch = db.query(Branch).filter(Branch.company_id == cid, Branch.rama == rama).first()
         if not branch:
-            result[str(cid)] = {"nombre": company.nombre, "logo_url": company.logo_url, "coberturas": {}}
             continue
 
-        plan_obj = None
+        candidatos = db.query(Plan).filter(Plan.branch_id == branch.id).all()
         if grupo:
-            # Elegir el plan representativo de la compañía que caiga en este grupo
-            candidatos = db.query(Plan).filter(Plan.branch_id == branch.id).all()
-            del_grupo = [p for p in candidatos if (p.grupo or clasificar_grupo(p.nombre_plan)) == grupo]
-            if variante:
-                preferidos = [p for p in del_grupo if p.variante == variante]
-                del_grupo = preferidos or del_grupo
-            plan_obj = del_grupo[0] if del_grupo else None
+            seleccion = [p for p in candidatos if (p.grupo or clasificar_grupo(p.nombre_plan)) == grupo]
+        elif plan:
+            seleccion = [p for p in candidatos if p.nombre_plan == plan]
         else:
-            query = db.query(Plan).filter(Plan.branch_id == branch.id, Plan.nombre_plan == plan)
-            if variante:
-                query = query.filter(Plan.variante == variante)
-            plan_obj = query.first()
+            seleccion = candidatos
+        if variante:
+            seleccion = [p for p in seleccion if p.variante == variante] or seleccion
 
-        if not plan_obj:
-            result[str(cid)] = {"nombre": company.nombre, "logo_url": company.logo_url, "coberturas": {}}
-            continue
+        for p in seleccion:
+            coberturas = {}
+            for cov in p.coverages:
+                coberturas[cov.campo_clave] = cov.valor
+                all_coverage_keys[cov.campo_clave] = cov.campo_label
 
-        coberturas = {}
-        for cov in plan_obj.coverages:
-            coberturas[cov.campo_clave] = cov.valor
-            all_coverage_keys[cov.campo_clave] = cov.campo_label
+            etiqueta_plan = p.nombre_plan + (f" ({p.variante})" if p.variante else "")
+            columns.append({
+                "id": f"{cid}-{p.id}",
+                "company_id": cid,
+                "nombre": company.nombre,
+                "logo_url": company.logo_url,
+                "plan_real": etiqueta_plan,
+                "particularidades": p.particularidades,
+                "coberturas": coberturas,
+            })
 
-        result[str(cid)] = {
-            "nombre": company.nombre,
-            "logo_url": company.logo_url,
-            "plan_real": plan_obj.nombre_plan,
-            "particularidades": plan_obj.particularidades,
-            "coberturas": coberturas,
-        }
-
-    # Normalize: fill missing coverages with "No incluye"
-    for cid_data in result.values():
+    # Normalizar: completar coberturas faltantes con "No incluye"
+    for col in columns:
         for key in all_coverage_keys:
-            if key not in cid_data["coberturas"]:
-                cid_data["coberturas"][key] = "No incluye"
+            col["coberturas"].setdefault(key, "No incluye")
 
     return {
         "coverage_keys": all_coverage_keys,
-        "companies": result,
+        "columns": columns,
     }
 
 
