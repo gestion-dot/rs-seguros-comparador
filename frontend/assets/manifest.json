@@ -1,0 +1,14 @@
+{
+  "name": "RS Seguros · Comparador",
+  "short_name": "RS Seguros",
+  "description": "Comparador de coberturas de seguros - RS Seguros & Finanzas",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/assets/logos/rs.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/logos/rs.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

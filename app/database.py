@@ -25,7 +25,8 @@ Base = declarative_base()
 class Company(Base):
     __tablename__ = "companies"
     id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String, unique=True, index=True)
+    nombre = Column(String, unique=True, index=True)  # clave interna (= carpeta de Drive)
+    nombre_oficial = Column(String, nullable=True)     # nombre comercial para mostrar
     fuente = Column(String, default="drive")  # "drive" o "url"
     drive_folder_id = Column(String, nullable=True)
     url_manual = Column(String, nullable=True)
@@ -91,6 +92,7 @@ def init_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS grupo VARCHAR"))
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS nombre_oficial VARCHAR"))
             conn.commit()
     except Exception:
         pass  # SQLite u otra DB: la columna ya viene de create_all

@@ -72,7 +72,7 @@ def get_companies(db: Session = Depends(get_db), _=Depends(verify_token)):
     return [
         {
             "id": c.id,
-            "nombre": c.nombre,
+            "nombre": c.nombre_oficial or c.nombre,
             "fuente": c.fuente,
             "logo_url": c.logo_url,
             "ultima_sync": c.ultima_sync.isoformat() if c.ultima_sync else None,
@@ -248,7 +248,7 @@ def compare(
             columns.append({
                 "id": f"{cid}-{p.id}",
                 "company_id": cid,
-                "nombre": company.nombre,
+                "nombre": company.nombre_oficial or company.nombre,
                 "logo_url": company.logo_url,
                 "plan_real": etiqueta_plan,
                 "particularidades": p.particularidades,

@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RS Seguros · Comparador</title>
+<link rel="icon" type="image/png" href="/assets/logos/rs.png">
+<link rel="apple-touch-icon" href="/assets/logos/rs.png">
+<link rel="manifest" href="/assets/manifest.json">
+<meta name="theme-color" content="#0f172a">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -29,7 +33,7 @@
 <!-- NAVBAR -->
 <nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
   <div class="flex items-center gap-3">
-    <img src="https://rsfinanzas.com/wp-content/uploads/2023/08/Logo-RS-SEGUROS-Y-FINANZAS-ISOTIPO-COLOR.png"
+    <img src="/assets/logos/rs.png"
          onerror="this.style.display='none'" class="h-9" alt="RS">
     <span class="font-bold text-gray-700 text-base hidden sm:block">RS Seguros &amp; Finanzas</span>
     <span class="text-gray-300 hidden sm:block">|</span>
@@ -525,8 +529,8 @@ function app(){return{
 
     let rsLogo=`<div style="color:white;font-weight:900;font-size:16px;">RS SEGUROS</div>`;
     try{
-      const blob=await fetch('https://rsfinanzas.com/wp-content/uploads/2023/08/Logo-RS-SEGUROS-Y-FINANZAS-ISOTIPO-COLOR.png').then(r=>r.ok?r.blob():null);
-      if(blob){const b64=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});rsLogo=`<img src="${b64}" style="height:52px;object-fit:contain;">`;}
+      const blob=await fetch('/assets/logos/rs.png').then(r=>r.ok?r.blob():null);
+      if(blob){const b64=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});rsLogo=`<img src="${b64}" style="height:56px;width:56px;object-fit:contain;">`;}
     }catch(e){}
 
     const html=`<div style="font-family:Arial,sans-serif;background:white;width:max-content;min-width:500px;">
@@ -544,8 +548,7 @@ function app(){return{
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div style="background:#f1f5f9;padding:8px 18px;display:flex;justify-content:space-between;">
-        <span style="font-size:10px;color:#94a3b8;">Generado por RS Seguros &amp; Finanzas</span>
+      <div style="background:#f1f5f9;padding:8px 18px;display:flex;justify-content:flex-end;">
         <span style="font-size:10px;color:#94a3b8;">${today}</span>
       </div>
     </div>`;
