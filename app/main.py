@@ -202,27 +202,29 @@ def compare(
 
 # ─── Sync ────────────────────────────────────────────────────────────────────
 
-def save_extracted_data(data: dict, db: Session):
-    company_name = data.get("compania", "Desconocida")
+def save_extracted_data(data: dict, db: Session, company: Optional[Company] = None):
     fecha = data.get("fecha_actualizacion_manual")
 
-    company = db.query(Company).filter(Company.nombre == company_name).first()
-    if company:
-        # Clear existing branch/plan/coverage data
-        for branch in company.branches:
-            db.delete(branch)
-        db.flush()
-    else:
+    # Always write into the canonical company record (created from the Drive folder
+    # name or the URL company). The AI's returned "compania" name often differs
+    # (e.g. folder "ALLIANZ" vs AI "Allianz Argentina"), which would otherwise
+    # create a duplicate record and leave the original empty / inactive.
+    if company is None:
+        company_name = data.get("compania", "Desconocida")
         company = db.query(Company).filter(Company.nombre == company_name).first()
+        if company is None:
+            company = Company(nombre=company_name)
+            db.add(company)
+            db.flush()
 
-    if company:
-        company.fecha_manual = fecha
-        company.ultima_sync = datetime.utcnow()
-    else:
-        # Should not happen but safety net
-        company = Company(nombre=company_name, fecha_manual=fecha, ultima_sync=datetime.utcnow())
-        db.add(company)
-        db.flush()
+    # Clear existing branch/plan/coverage data before re-inserting
+    for branch in list(company.branches):
+        db.delete(branch)
+    db.flush()
+
+    company.fecha_manual = fecha
+    company.ultima_sync = datetime.utcnow()
+    company.activa = True
 
     LABEL_MAP = {
         "responsabilidad_civil": "Responsabilidad Civil",
@@ -341,8 +343,7 @@ def run_sync(db_session_factory, force: bool = False):
 
                     log_sync(f"🤖 {company_name}: analizando con IA...", "processing")
                     data = extract_from_pdf(pdf_path, company_name)
-                    save_extracted_data(data, db)
-                    db.query(Company).filter(Company.nombre == company_name).update({"activa": True})
+                    save_extracted_data(data, db, company=company)
                     db.commit()
 
                     ramas = [r.get("rama","?") for r in data.get("ramas",[])]
@@ -362,10 +363,7 @@ def run_sync(db_session_factory, force: bool = False):
                     text = extract_text_from_url(company.url_manual)
                     log_sync(f"🤖 {company.nombre}: analizando con IA...", "processing")
                     data = extract_from_text(text, company.nombre)
-                    save_extracted_data(data, db)
-                    db.query(Company).filter(Company.id == company.id).update({
-                        "ultima_sync": datetime.utcnow(), "activa": True,
-                    })
+                    save_extracted_data(data, db, company=company)
                     db.commit()
                     ramas = [r.get("rama","?") for r in data.get("ramas",[])]
                     log_sync(f"✓ {company.nombre}: OK ({', '.join(ramas)})", "ok")
