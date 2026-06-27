@@ -36,13 +36,15 @@
     <span class="text-sm text-gray-500 hidden sm:block">Comparador de Coberturas</span>
   </div>
   <div class="flex items-center gap-3">
-    <button @click="triggerSync()" :disabled="syncing"
+    <button @click="triggerSync(false)" :disabled="syncing"
       class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50">
       <svg :class="syncing?'animate-spin':''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
       </svg>
       <span x-text="syncing?'Sincronizando...':'Sincronizar'"></span>
     </button>
+    <button @click="confirmForceSync()" :disabled="syncing" title="Vuelve a analizar TODAS las compañías con IA para actualizar coberturas (consume más cuota)"
+      class="text-xs text-gray-400 hover:text-emerald-600 transition disabled:opacity-50">Re-analizar todo</button>
     <button @click="logout()" class="text-sm text-gray-400 hover:text-red-500 transition">Salir</button>
   </div>
 </nav>
@@ -449,8 +451,12 @@ function app(){return{
     return v.length>70?v.substring(0,70)+'…':v;
   },
 
-  async triggerSync(){
-    const r=await api('/sync',{method:'POST'});
+  confirmForceSync(){
+    if(confirm('Re-analizar TODAS las compañías con IA para actualizar las coberturas completas.\n\nEsto consume más cuota de IA y puede tardar. ¿Continuar?'))
+      this.triggerSync(true);
+  },
+  async triggerSync(force=false){
+    const r=await api('/sync'+(force?'?force=true':''),{method:'POST'});
     if(!r) return;
     if(!r.ok){
       const d=await r.json();
