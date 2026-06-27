@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: rs-seguros-comparador
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_USERNAME
+        value: rsseguros
+      - key: APP_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DRIVE_FOLDER_ID
+        value: 1yCVSrdeMQkn7HI529RkZLaNVGNd3RgEB
+      - key: DATABASE_PATH
+        value: /data/seguros.db
+      - key: DOWNLOADS_DIR
+        value: /data/downloads
+    disk:
+      name: seguros-data
+      mountPath: /data
+      sizeGB: 1
