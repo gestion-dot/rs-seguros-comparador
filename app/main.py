@@ -18,7 +18,7 @@ from .auth import create_token, verify_token, check_credentials
 from .database import get_db, init_db, Company, Branch, Plan, Coverage, SyncLog
 from .drive import list_subfolders, get_file_content_as_pdf_path
 from .web_source import extract_text_from_url
-from .extractor import extract_from_pdf, extract_from_text
+from .extractor import extract_from_pdf, extract_from_text, QuotaExhaustedError
 
 app = FastAPI(title="RS Seguros Comparador")
 
@@ -370,6 +370,14 @@ def run_sync(db_session_factory, force: bool = False):
                     log = SyncLog(company_nombre=company.nombre, accion="updated", detalle="URL sync")
                     db.add(log)
                     db.commit()
+
+            except QuotaExhaustedError:
+                log_sync(
+                    "🛑 Cuota diaria de IA (Gemini) agotada. Lo cargado quedó guardado. "
+                    "Volvé a tocar Sincronizar después del reset diario (medianoche hora del Pacífico).",
+                    "error",
+                )
+                break
 
             except Exception as e:
                 name = item["name"] if fuente == "drive" else item.nombre

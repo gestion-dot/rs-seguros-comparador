@@ -10,12 +10,21 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # Throttling / retry config (free-tier Gemini rate limits)
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 BASE_BACKOFF = 20          # seconds, used if API doesn't suggest a retry delay
 INTER_CALL_DELAY = 6       # seconds between successful calls (~10 req/min ceiling)
 MAX_INPUT_CHARS = 45000    # cap input size to reduce tokens-per-minute pressure
 
 _last_call_ts = [0.0]      # mutable holder for last successful call timestamp
+
+
+class QuotaExhaustedError(Exception):
+    """Raised when Gemini reports the daily/project quota is exhausted."""
+
+
+def _is_daily_quota(err: Exception) -> bool:
+    s = str(err).lower()
+    return "perday" in s or "per day" in s or "per_day" in s
 
 
 def _retry_delay_from_error(err: Exception) -> float | None:
@@ -54,6 +63,9 @@ def _generate_with_retry(prompt: str) -> str:
         except Exception as e:  # noqa: BLE001 - SDK raises google.api_core exceptions
             last_err = e
             _last_call_ts[0] = time.time()
+            # Daily/project quota: retrying within the same day is futile — fail fast.
+            if _is_rate_limit(e) and _is_daily_quota(e):
+                raise QuotaExhaustedError(str(e))
             if not _is_rate_limit(e) or attempt == MAX_RETRIES - 1:
                 raise
             wait = _retry_delay_from_error(e) or (BASE_BACKOFF * (attempt + 1))
