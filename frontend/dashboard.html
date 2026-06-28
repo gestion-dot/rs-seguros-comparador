@@ -310,13 +310,12 @@
                 <th class="px-3 py-3 text-center bg-slate-800 min-w-36 relative">
                   <button @click="hideColumn(col.id)" title="Ocultar columna"
                     class="absolute top-1 right-1 text-slate-400 hover:text-red-400 text-xs leading-none w-4 h-4">✕</button>
-                  <div class="flex flex-col items-center gap-1.5">
+                  <div class="flex flex-col items-center gap-1">
                     <template x-if="col.logo_url">
-                      <img :src="col.logo_url" class="h-9 w-auto object-contain max-w-28" :alt="col.nombre"
-                           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                      <img :src="col.logo_url" class="h-10 w-auto object-contain max-w-28 bg-white rounded p-1" :alt="col.nombre"
+                           onerror="this.style.display='none'">
                     </template>
-                    <div class="logo-fb" :style="col.logo_url?'display:none':'display:flex'" x-text="col.nombre.substring(0,6)"></div>
-                    <span class="text-xs font-bold text-white" x-show="!col.logo_url" x-text="col.nombre"></span>
+                    <span class="text-xs font-bold text-white leading-tight" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
                     <span class="text-[10px] font-normal text-slate-300 leading-tight" x-show="col.plan_real" x-text="col.plan_real"></span>
                   </div>
                 </th>
@@ -499,6 +498,9 @@ function app(){return{
   },
   hideColumn(id){ if(!this.hiddenColumns.includes(id)) this.hiddenColumns.push(id); },
   showColumn(id){ const i=this.hiddenColumns.indexOf(id); if(i>=0) this.hiddenColumns.splice(i,1); },
+  // Logos que YA incluyen el nombre de la compañía (no hace falta repetir el nombre).
+  // El resto son isotipos/símbolos → se muestra el nombre además del logo.
+  logoConNombre(url){ return !!url && /experta/i.test(url); },
 
   toggleCoverage(key){
     const i=this.selectedCoverageKeys.indexOf(key);
@@ -577,8 +579,8 @@ function app(){return{
     const today=new Date().toLocaleDateString('es-AR');
 
     const colHeaders=cos.map(c=>{
-      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:46px;max-width:120px;object-fit:contain;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
-      const nombreTxt=c.logo_url?'':`<div style="font-size:11px;font-weight:700;">${c.nombre}</div>`;
+      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:46px;max-width:120px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
+      const nombreTxt=this.logoConNombre(c.logo_url)?'':`<div style="font-size:11px;font-weight:700;">${c.nombre}</div>`;
       const planTxt=c.plan_real?`<div style="font-size:9px;font-weight:400;color:#cbd5e1;margin-top:2px;">${c.plan_real}</div>`:'';
       return`<th style="padding:10px 12px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:130px;">${logo}${nombreTxt}${planTxt}</th>`;
     }).join('');
