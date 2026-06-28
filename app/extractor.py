@@ -2,77 +2,140 @@ import json
 import os
 import re
 import time
+import requests
 import pdfplumber
 from pathlib import Path
-import google.generativeai as genai
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-# El modelo se puede cambiar por env var. flash-lite tiene una cuota diaria
-# gratuita separada (y más alta) que gemini-2.5-flash.
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
-model = genai.GenerativeModel(MODEL_NAME)
+# ─── Motor de IA (configurable por variables de entorno) ──────────────────────
+# AI_PROVIDER = "groq" (recomendado, cuota gratis alta) o "gemini".
+AI_PROVIDER = os.getenv("AI_PROVIDER", "groq").lower()
 
-# Throttling / retry config (free-tier Gemini rate limits)
-MAX_RETRIES = 3
-BASE_BACKOFF = 20          # seconds, used if API doesn't suggest a retry delay
-INTER_CALL_DELAY = 6       # seconds between successful calls (~10 req/min ceiling)
-MAX_INPUT_CHARS = 120000   # leer manuales largos completos (flash-lite admite contexto amplio)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "8000"))
 
-_last_call_ts = [0.0]      # mutable holder for last successful call timestamp
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+
+# Throttling / retry
+MAX_RETRIES = 4
+BASE_BACKOFF = 20          # segundos si la API no sugiere retry-after
+INTER_CALL_DELAY = float(os.getenv("INTER_CALL_DELAY", "3"))
+MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "40000"))  # acota tokens por request
+
+_last_call_ts = [0.0]
+_gemini_model = [None]      # lazy init
 
 
 class QuotaExhaustedError(Exception):
-    """Raised when Gemini reports the daily/project quota is exhausted."""
+    """La cuota diaria del proveedor de IA está agotada (no reintentar hoy)."""
 
 
-def _is_daily_quota(err: Exception) -> bool:
-    s = str(err).lower()
-    return "perday" in s or "per day" in s or "per_day" in s
+class RateLimitError(Exception):
+    """Límite por minuto: conviene esperar y reintentar."""
+    def __init__(self, msg, retry_after=None):
+        super().__init__(msg)
+        self.retry_after = retry_after
 
 
-def _retry_delay_from_error(err: Exception) -> float | None:
-    """Parse the suggested retry delay (seconds) from a Gemini 429 error, if present."""
-    msg = str(err)
-    m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", msg)
+def _is_rate_limit_text(s: str) -> bool:
+    s = s.lower()
+    return "429" in s or "rate limit" in s or "rate_limit" in s or "quota" in s or "exhausted" in s
+
+
+def _is_daily_quota_text(s: str) -> bool:
+    s = s.lower()
+    return "per day" in s or "perday" in s or "per_day" in s or "tpd" in s or "rpd" in s or "tokens per day" in s
+
+
+def _parse_retry_after(header_val, body_text) -> float | None:
+    if header_val:
+        try:
+            return float(header_val)
+        except ValueError:
+            pass
+    # Gemini: "retry_delay { seconds: 30 }"
+    m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", body_text)
     if m:
         return float(m.group(1))
-    m = re.search(r"retry[- ]after[\"']?\s*[:=]\s*(\d+)", msg, re.IGNORECASE)
+    # Groq: "try again in 1m2.5s" o "in 20.5s"
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", body_text, re.IGNORECASE)
     if m:
-        return float(m.group(1))
+        mins = float(m.group(1)) if m.group(1) else 0.0
+        return mins * 60 + float(m.group(2))
     return None
 
 
-def _is_rate_limit(err: Exception) -> bool:
-    s = str(err).lower()
-    return "429" in s or "quota" in s or "exhausted" in s or "rate limit" in s
-
-
 def _throttle():
-    """Space out calls to stay under the per-minute request ceiling."""
     elapsed = time.time() - _last_call_ts[0]
     if elapsed < INTER_CALL_DELAY:
         time.sleep(INTER_CALL_DELAY - elapsed)
 
 
-def _generate_with_retry(prompt: str) -> str:
-    """Call Gemini with throttling and exponential backoff on rate-limit (429) errors."""
+def _call_groq(system: str, user: str) -> str:
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        raise RuntimeError("Falta configurar GROQ_API_KEY")
+    body = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.1,
+        "max_tokens": GROQ_MAX_TOKENS,
+        "response_format": {"type": "json_object"},
+    }
+    r = requests.post(
+        GROQ_URL,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json=body,
+        timeout=180,
+    )
+    if r.status_code == 429:
+        if _is_daily_quota_text(r.text):
+            raise QuotaExhaustedError(r.text[:400])
+        raise RateLimitError(r.text[:400], retry_after=_parse_retry_after(r.headers.get("retry-after"), r.text))
+    if r.status_code >= 400:
+        raise RuntimeError(f"Groq {r.status_code}: {r.text[:300]}")
+    _last_call_ts[0] = time.time()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _call_gemini(full_prompt: str) -> str:
+    if _gemini_model[0] is None:
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        _gemini_model[0] = genai.GenerativeModel(GEMINI_MODEL)
+    try:
+        resp = _gemini_model[0].generate_content(full_prompt)
+        _last_call_ts[0] = time.time()
+        return resp.text
+    except Exception as e:  # noqa: BLE001
+        _last_call_ts[0] = time.time()
+        s = str(e)
+        if _is_rate_limit_text(s) and _is_daily_quota_text(s):
+            raise QuotaExhaustedError(s)
+        if _is_rate_limit_text(s):
+            raise RateLimitError(s, retry_after=_parse_retry_after(None, s))
+        raise
+
+
+def _generate_with_retry(user_prompt: str) -> str:
+    """Llama al proveedor de IA configurado, con throttling y reintentos por rate-limit."""
     last_err = None
     for attempt in range(MAX_RETRIES):
         _throttle()
         try:
-            response = model.generate_content(prompt)
-            _last_call_ts[0] = time.time()
-            return response.text
-        except Exception as e:  # noqa: BLE001 - SDK raises google.api_core exceptions
+            if AI_PROVIDER == "gemini":
+                return _call_gemini(f"{SYSTEM_PROMPT}\n\n{user_prompt}")
+            return _call_groq(SYSTEM_PROMPT, user_prompt)
+        except QuotaExhaustedError:
+            raise
+        except RateLimitError as e:
             last_err = e
-            _last_call_ts[0] = time.time()
-            # Daily/project quota: retrying within the same day is futile — fail fast.
-            if _is_rate_limit(e) and _is_daily_quota(e):
-                raise QuotaExhaustedError(str(e))
-            if not _is_rate_limit(e) or attempt == MAX_RETRIES - 1:
+            if attempt == MAX_RETRIES - 1:
                 raise
-            wait = _retry_delay_from_error(e) or (BASE_BACKOFF * (attempt + 1))
-            time.sleep(wait)
+            time.sleep(e.retry_after or (BASE_BACKOFF * (attempt + 1)))
     raise last_err  # pragma: no cover
 
 SYSTEM_PROMPT = """Eres un analista experto en seguros de Argentina. Tu tarea es analizar manuales de pólizas de seguros y extraer la información clave de las coberturas para alimentar una base de datos comparativa.
@@ -178,9 +241,9 @@ def clean_json_response(raw: str) -> str:
 def extract_coverages_from_text(text: str, company_name: str) -> dict:
     truncated = text[:MAX_INPUT_CHARS] if len(text) > MAX_INPUT_CHARS else text
 
-    prompt = f"{SYSTEM_PROMPT}\n\nCompañía: {company_name}\n\nContenido del manual:\n\n{truncated}"
+    user_prompt = f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}"
 
-    raw = _generate_with_retry(prompt)
+    raw = _generate_with_retry(user_prompt)
     return json.loads(clean_json_response(raw))
 
 
