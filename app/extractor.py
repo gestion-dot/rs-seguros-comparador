@@ -220,12 +220,21 @@ def extract_text_from_pdf(pdf_path: Path) -> str:
             raise ValueError("El archivo descargado no es un PDF válido ni contiene texto legible.")
         return text
 
+    # Cortar la lectura temprano: con manuales muy largos, leer el PDF entero
+    # con pdfplumber consume demasiada memoria (Render free = 512MB → el worker
+    # muere sin dejar error). Igual el texto se recorta a MAX_INPUT_CHARS.
+    limite = MAX_INPUT_CHARS * 2
     text_parts = []
+    total = 0
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if text:
                 text_parts.append(text)
+                total += len(text)
+            page.flush_cache()  # liberar memoria de la página
+            if total >= limite:
+                break
     return "\n".join(text_parts)
 
 
