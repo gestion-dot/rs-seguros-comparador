@@ -49,15 +49,13 @@
     <span class="text-sm text-gray-500 hidden sm:block">Comparador de Coberturas</span>
   </div>
   <div class="flex items-center gap-3">
-    <button @click="triggerSync(false)" :disabled="syncing"
+    <button @click="triggerSync(true)" :disabled="syncing" title="Busca manuales nuevos o modificados y actualiza coberturas con IA"
       class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50">
       <svg :class="syncing?'animate-spin':''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
       </svg>
       <span x-text="syncing?'Sincronizando...':'Sincronizar'"></span>
     </button>
-    <button @click="confirmForceSync()" :disabled="syncing" title="Vuelve a analizar TODAS las compañías con IA para actualizar coberturas (consume más cuota)"
-      class="text-xs text-gray-400 hover:text-emerald-600 transition disabled:opacity-50">Re-analizar todo</button>
     <button @click="logout()" class="text-sm text-gray-400 hover:text-red-500 transition">Salir</button>
   </div>
 </nav>
@@ -318,7 +316,7 @@
                            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     </template>
                     <div class="logo-fb" :style="col.logo_url?'display:none':'display:flex'" x-text="col.nombre.substring(0,6)"></div>
-                    <span class="text-xs font-bold text-white" x-text="col.nombre"></span>
+                    <span class="text-xs font-bold text-white" x-show="!col.logo_url" x-text="col.nombre"></span>
                     <span class="text-[10px] font-normal text-slate-300 leading-tight" x-show="col.plan_real" x-text="col.plan_real"></span>
                   </div>
                 </th>
@@ -579,9 +577,10 @@ function app(){return{
     const today=new Date().toLocaleDateString('es-AR');
 
     const colHeaders=cos.map(c=>{
-      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:44px;max-width:110px;object-fit:contain;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
+      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:46px;max-width:120px;object-fit:contain;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
+      const nombreTxt=c.logo_url?'':`<div style="font-size:11px;font-weight:700;">${c.nombre}</div>`;
       const planTxt=c.plan_real?`<div style="font-size:9px;font-weight:400;color:#cbd5e1;margin-top:2px;">${c.plan_real}</div>`:'';
-      return`<th style="padding:10px 12px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:130px;">${logo}<div style="font-size:11px;font-weight:700;">${c.nombre}</div>${planTxt}</th>`;
+      return`<th style="padding:10px 12px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:130px;">${logo}${nombreTxt}${planTxt}</th>`;
     }).join('');
 
     const rows=keys.map(k=>{
