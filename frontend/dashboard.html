@@ -19,7 +19,16 @@
   .cell-yes{background:#dcfce7;color:#166534}
   .cell-no{background:#fee2e2;color:#991b1b}
   .cell-unknown{background:#f3f4f6;color:#6b7280}
+  .cell-faltamanual{background:#fef9c3;color:#854d0e;font-weight:600}
   #compare-table th,#compare-table td{border:1px solid #e2e8f0}
+  /* Scroll horizontal siempre visible en la tabla comparativa */
+  .tabla-scroll{overflow:auto;max-height:calc(100vh - 230px);}
+  .tabla-scroll{scrollbar-width:auto;scrollbar-color:#94a3b8 #e2e8f0;}
+  .tabla-scroll::-webkit-scrollbar{height:14px;width:14px;}
+  .tabla-scroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:7px;}
+  .tabla-scroll::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:7px;border:3px solid #e2e8f0;}
+  .tabla-scroll::-webkit-scrollbar-thumb:hover{background:#64748b;}
+  #compare-table thead th{position:sticky;top:0;z-index:20;}
   .ts-wrapper{width:100%}
   .ts-control{border:1px solid #d1d5db!important;border-radius:8px!important;padding:6px 10px!important;font-size:13px!important;min-height:38px!important}
   .ts-dropdown{font-size:13px!important;border-radius:8px!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}
@@ -163,17 +172,24 @@
         </div>
       </div>
 
-      <!-- 3a · GRUPO DE COBERTURA (solo Autos/Motos) -->
+      <!-- 3a · GRUPO DE COBERTURA (solo Autos/Motos) - multi-selección -->
       <div x-show="selectedRama && esVehiculo">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">3 · Tipo de cobertura</label>
-        <div class="flex flex-wrap gap-1.5">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          3 · Tipo de cobertura
+          <span class="text-emerald-600 font-normal" x-text="selectedGrupos.length>0 ? '('+selectedGrupos.length+' sel.)' : ''"></span>
+        </label>
+        <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-emerald-50 hover:bg-emerald-100 mb-1">
+          <input type="checkbox" :checked="allGruposSelected" @change="toggleAllGrupos()" class="rounded text-emerald-600">
+          <span class="text-xs font-bold text-emerald-700">Todos los tipos</span>
+        </label>
+        <div class="space-y-0.5 border border-gray-100 rounded-lg p-1">
           <template x-for="g in grupos" :key="g">
-            <button @click="selectGrupo(g)"
-              :class="selectedGrupo===g?'bg-emerald-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="g"></button>
+            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+              <input type="checkbox" :checked="selectedGrupos.includes(g)" @change="toggleGrupo(g)" class="rounded text-emerald-600">
+              <span class="text-xs text-gray-700" x-text="g"></span>
+            </label>
           </template>
         </div>
-        <p x-show="grupos.length===0" class="text-xs text-gray-400 mt-1">No se detectaron grupos de cobertura en los manuales de esta rama.</p>
       </div>
 
       <!-- 3b · PLAN (ramas que no son vehículos) -->
@@ -264,7 +280,7 @@
 
       <!-- Aviso: compañías sin datos para esta rama/grupo -->
       <div x-show="companiesWithoutData.length>0" class="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-orange-700">
-        <span class="font-semibold">Sin planes en "<span x-text="(selectedGrupo||selectedPlan)"></span>":</span>
+        <span class="font-semibold">Sin planes en "<span x-text="(selectedGrupos.join(', ')||selectedPlan)"></span>":</span>
         <span x-text="companiesWithoutData.join(', ')"></span>.
         <span class="text-orange-500">Esa compañía no ofrece este tipo de cobertura (o falta cargarlo desde el manual).</span>
       </div>
@@ -287,7 +303,7 @@
       </div>
 
       <!-- Comparison table -->
-      <div x-show="visibleColumns.length>0" class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <div x-show="visibleColumns.length>0" class="tabla-scroll rounded-xl border border-gray-200 shadow-sm">
         <table id="compare-table" class="min-w-full text-xs border-collapse">
           <thead>
             <tr>
@@ -354,7 +370,7 @@ function app(){return{
   companies:[], ramas:[],
   companySearch:'', selectedCompanies:[],
   selectedRama:'', esVehiculo:false,
-  grupos:[], selectedGrupo:'',
+  grupos:[], selectedGrupos:[],
   planNames:[], selectedPlan:'',
   compareResult:null, allCoverageKeys:[], selectedCoverageKeys:[], coverageLabels:{},
   hiddenColumns:[],
@@ -367,7 +383,9 @@ function app(){return{
   get filteredCompanies(){
     const q=this.companySearch.toLowerCase();
     let list=this.companies;
-    if(this.selectedRama) list=list.filter(c=>c.ramas.includes(this.selectedRama));
+    // En Hogar/otras ramas no-vehículo filtramos por rama; en Autos/Motos mostramos todas
+    // (premisa: todas trabajan autos; si falta, se marca "FALTA MANUAL PRODUCTO").
+    if(this.selectedRama && !this.esVehiculo) list=list.filter(c=>c.ramas.includes(this.selectedRama));
     return list.filter(c=>c.nombre.toLowerCase().includes(q));
   },
   get allCompaniesSelected(){
@@ -375,14 +393,15 @@ function app(){return{
     return list.length>0 && list.every(c=>this.selectedCompanies.includes(c.id));
   },
   get companiesWithoutData(){
-    if(!this.compareResult) return [];
+    // En vehículos las faltantes se muestran como "FALTA MANUAL PRODUCTO" (columna), no como aviso
+    if(!this.compareResult || this.esVehiculo) return [];
     const conCol=new Set(this.columns.map(c=>c.company_id));
     return this.selectedCompanies
       .filter(id=>!conCol.has(id))
       .map(id=>{const c=this.companies.find(x=>x.id===id);return c?c.nombre:('#'+id);});
   },
   get canCompare(){
-    return this.selectedCompanies.length>=1 && (this.selectedGrupo || this.selectedPlan);
+    return this.selectedCompanies.length>=1 && (this.selectedGrupos.length>0 || this.selectedPlan);
   },
   get columns(){ return (this.compareResult&&this.compareResult.columns)||[]; },
   get visibleColumns(){ return this.columns.filter(c=>!this.hiddenColumns.includes(c.id)); },
@@ -425,17 +444,19 @@ function app(){return{
   // 2 · Rama
   async selectRama(r){
     this.selectedRama=r;
-    this.selectedGrupo=''; this.selectedPlan='';
+    this.selectedGrupos=[]; this.selectedPlan='';
     this.grupos=[]; this.planNames=[]; this.compareResult=null;
     this.esVehiculo=/auto|moto|veh/i.test(r);
-    // Quitar de la selección las compañías que no ofrecen esta rama
-    const sinRama=this.selectedCompanies.filter(id=>{
-      const c=this.companies.find(x=>x.id===id); return c && !c.ramas.includes(r);
-    });
-    if(sinRama.length){
-      const nombres=sinRama.map(id=>this.companies.find(x=>x.id===id).nombre).join(', ');
-      this.selectedCompanies=this.selectedCompanies.filter(id=>!sinRama.includes(id));
-      this.showToast('No ofrecen '+r+', se quitaron: '+nombres, 5000);
+    // Solo en ramas NO vehículo quitamos compañías sin la rama (en autos/motos todas aplican)
+    if(!this.esVehiculo){
+      const sinRama=this.selectedCompanies.filter(id=>{
+        const c=this.companies.find(x=>x.id===id); return c && !c.ramas.includes(r);
+      });
+      if(sinRama.length){
+        const nombres=sinRama.map(id=>this.companies.find(x=>x.id===id).nombre).join(', ');
+        this.selectedCompanies=this.selectedCompanies.filter(id=>!sinRama.includes(id));
+        this.showToast('No ofrecen '+r+', se quitaron: '+nombres, 5000);
+      }
     }
     if(this.esVehiculo){
       const resp=await api('/grupos?rama='+encodeURIComponent(r));
@@ -446,16 +467,26 @@ function app(){return{
     }
   },
 
-  // 3 · Grupo / Plan
-  selectGrupo(g){ this.selectedGrupo=g; this.selectedPlan=''; this.compareResult=null; },
-  selectPlan(p){ this.selectedPlan=p; this.selectedGrupo=''; this.compareResult=null; },
+  // 3 · Grupo (multi) / Plan
+  toggleGrupo(g){
+    const i=this.selectedGrupos.indexOf(g);
+    if(i>=0) this.selectedGrupos.splice(i,1);
+    else this.selectedGrupos.push(g);
+    this.selectedPlan=''; this.compareResult=null;
+  },
+  get allGruposSelected(){ return this.grupos.length>0 && this.selectedGrupos.length===this.grupos.length; },
+  toggleAllGrupos(){
+    this.selectedGrupos = this.allGruposSelected ? [] : [...this.grupos];
+    this.selectedPlan=''; this.compareResult=null;
+  },
+  selectPlan(p){ this.selectedPlan=p; this.selectedGrupos=[]; this.compareResult=null; },
 
   async compare(){
     if(!this.canCompare) return;
     this.loading=true;
     try{
       let url=`/compare?rama=${encodeURIComponent(this.selectedRama)}&companies=${this.selectedCompanies.join(',')}`;
-      if(this.selectedGrupo) url+=`&grupo=${encodeURIComponent(this.selectedGrupo)}`;
+      if(this.selectedGrupos.length) url+=`&grupos=${encodeURIComponent(this.selectedGrupos.join(','))}`;
       else if(this.selectedPlan) url+=`&plan=${encodeURIComponent(this.selectedPlan)}`;
       const r=await api(url); if(!r||!r.ok) return;
       const data=await r.json();
@@ -464,7 +495,7 @@ function app(){return{
       this.coverageLabels=data.coverage_keys||{};
       this.allCoverageKeys=Object.keys(data.coverage_keys||{});
       this.selectedCoverageKeys=[...this.allCoverageKeys];
-      const tipo=this.selectedGrupo||this.selectedPlan;
+      const tipo=this.selectedGrupos.length ? this.selectedGrupos.join(' + ') : this.selectedPlan;
       this.currentTitle=`${this.selectedRama} · ${tipo}`;
     }finally{this.loading=false;}
   },
@@ -478,16 +509,19 @@ function app(){return{
   },
 
   cellClass(v){
+    if(v==='FALTA MANUAL PRODUCTO') return 'cell-faltamanual';
     if(!v||v==='No incluye') return 'cell-no';
     if(v==='No especificado') return 'cell-unknown';
     return 'cell-yes';
   },
   cellIcon(v){
+    if(v==='FALTA MANUAL PRODUCTO') return '⚠';
     if(!v||v==='No incluye') return '✗';
     if(v==='No especificado') return '—';
     return '✓';
   },
   cellText(v){
+    if(v==='FALTA MANUAL PRODUCTO') return 'Falta manual producto';
     if(!v||v==='No incluye'||v==='No especificado') return '';
     return v.length>70?v.substring(0,70)+'…':v;
   },
@@ -554,11 +588,11 @@ function app(){return{
       const label=lbls[k]||k;
       const cells=cos.map(c=>{
         const v=c.coberturas[k]||'No incluye';
-        let bg,col,icon;
-        if(v==='No incluye'){bg='#fee2e2';col='#991b1b';icon='✗';}
-        else if(v==='No especificado'){bg='#f3f4f6';col='#6b7280';icon='—';}
-        else{bg='#dcfce7';col='#166534';icon='✓';}
-        const txt=(v!=='No incluye'&&v!=='No especificado')?`<div style="font-size:10px;color:#374151;margin-top:2px;">${v.length>65?v.substring(0,65)+'…':v}</div>`:'';
+        let bg,col,icon,txt;
+        if(v==='FALTA MANUAL PRODUCTO'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual producto</div>`;}
+        else if(v==='No incluye'){bg='#fee2e2';col='#991b1b';icon='✗';txt='';}
+        else if(v==='No especificado'){bg='#f3f4f6';col='#6b7280';icon='—';txt='';}
+        else{bg='#dcfce7';col='#166534';icon='✓';txt=`<div style="font-size:10px;color:#374151;margin-top:2px;">${v.length>65?v.substring(0,65)+'…':v}</div>`;}
         return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;"><div style="font-weight:700;font-size:15px;color:${col};">${icon}</div>${txt}</td>`;
       }).join('');
       return`<tr><td style="padding:8px 12px;font-size:11px;font-weight:600;color:#374151;border:1px solid #e2e8f0;background:#f8fafc;">${label}</td>${cells}</tr>`;

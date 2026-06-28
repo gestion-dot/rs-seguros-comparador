@@ -183,24 +183,30 @@ def get_planes(rama: str, db: Session = Depends(get_db), _=Depends(verify_token)
 
 @app.get("/grupos")
 def get_grupos(rama: str, db: Session = Depends(get_db), _=Depends(verify_token)):
-    """Devuelve los grupos canónicos de plan disponibles para una rama de vehículos."""
+    """Grupos canónicos para una rama de vehículos.
+
+    Por premisa de negocio, TODAS las compañías ofrecen estos grupos en Autos/Motos;
+    si en la base falta alguno para una compañía, es porque falta el manual (se muestra
+    "FALTA MANUAL PRODUCTO" en la comparativa), no porque no exista el producto.
+    """
     if not _rama_es_vehiculo(rama):
         return []
-    plans = (
-        db.query(Plan.nombre_plan, Plan.grupo)
-        .join(Branch)
-        .filter(Branch.rama == rama)
-        .distinct()
-        .all()
-    )
-    presentes = set()
-    for nombre, grupo in plans:
-        g = grupo or clasificar_grupo(nombre)
-        if g:
-            presentes.add(g)
-    # Mantener el orden canónico de presentación
-    orden = ["RC", "Garage", "Todo/Total", "Terceros Completo", "Todo Riesgo"]
-    return [g for g in orden if g in presentes]
+    return ["RC", "Garage", "Todo/Total", "Terceros Completo", "Todo Riesgo"]
+
+
+FALTA_MANUAL = "FALTA MANUAL PRODUCTO"
+
+# Coberturas estándar (para mostrar filas aunque ninguna compañía tenga datos)
+COBERTURAS_ESTANDAR = {
+    "responsabilidad_civil": "Responsabilidad Civil",
+    "robo_hurto": "Robo y/o Hurto",
+    "incendio": "Incendio",
+    "destruccion_total": "Destrucción Total",
+    "danos_parciales": "Daños Parciales",
+    "granizo": "Granizo",
+    "cristales_cerraduras": "Cristales y Cerraduras",
+    "auxilio_mecanico": "Auxilio Mecánico / Remolque",
+}
 
 
 @app.get("/compare")
@@ -209,14 +215,23 @@ def compare(
     companies: str,
     plan: Optional[str] = None,
     grupo: Optional[str] = None,
+    grupos: Optional[str] = None,
     variante: Optional[str] = None,
     db: Session = Depends(get_db),
     _=Depends(verify_token),
 ):
-    """Compara compañías por grupo (una columna por cada plan que encuadre) o por plan exacto."""
-    company_ids = [int(x) for x in companies.split(",") if x.strip()]
+    """Compara compañías por grupo(s) (una columna por plan que encuadre) o por plan exacto.
 
-    columns = []          # una entrada por PLAN (= columna de la tabla)
+    En Autos/Motos, una compañía seleccionada que no tenga plan en los grupos pedidos
+    igual aparece como columna con "FALTA MANUAL PRODUCTO" (premisa: el producto existe,
+    falta cargar el manual).
+    """
+    company_ids = [int(x) for x in companies.split(",") if x.strip()]
+    grupos_sel = [g.strip() for g in (grupos or grupo or "").split(",") if g.strip()]
+    es_veh = _rama_es_vehiculo(rama)
+
+    columns = []            # columnas con datos
+    sin_datos = []          # (cid, company) sin plan en los grupos pedidos
     all_coverage_keys = {}  # key -> label
 
     for cid in company_ids:
@@ -225,40 +240,58 @@ def compare(
             continue
 
         branch = db.query(Branch).filter(Branch.company_id == cid, Branch.rama == rama).first()
-        if not branch:
-            continue
+        seleccion = []
+        if branch:
+            candidatos = db.query(Plan).filter(Plan.branch_id == branch.id).all()
+            if grupos_sel:
+                seleccion = [p for p in candidatos if (p.grupo or clasificar_grupo(p.nombre_plan)) in grupos_sel]
+            elif plan:
+                seleccion = [p for p in candidatos if p.nombre_plan == plan]
+            else:
+                seleccion = candidatos
+            if variante:
+                seleccion = [p for p in seleccion if p.variante == variante] or seleccion
 
-        candidatos = db.query(Plan).filter(Plan.branch_id == branch.id).all()
-        if grupo:
-            seleccion = [p for p in candidatos if (p.grupo or clasificar_grupo(p.nombre_plan)) == grupo]
-        elif plan:
-            seleccion = [p for p in candidatos if p.nombre_plan == plan]
+        if seleccion:
+            for p in seleccion:
+                coberturas = {}
+                for cov in p.coverages:
+                    coberturas[cov.campo_clave] = cov.valor
+                    all_coverage_keys[cov.campo_clave] = cov.campo_label
+                etiqueta_plan = p.nombre_plan + (f" ({p.variante})" if p.variante else "")
+                columns.append({
+                    "id": f"{cid}-{p.id}",
+                    "company_id": cid,
+                    "nombre": company.nombre_oficial or company.nombre,
+                    "logo_url": company.logo_url,
+                    "plan_real": etiqueta_plan,
+                    "particularidades": p.particularidades,
+                    "falta_manual": False,
+                    "coberturas": coberturas,
+                })
         else:
-            seleccion = candidatos
-        if variante:
-            seleccion = [p for p in seleccion if p.variante == variante] or seleccion
+            sin_datos.append((cid, company))
 
-        for p in seleccion:
-            coberturas = {}
-            for cov in p.coverages:
-                coberturas[cov.campo_clave] = cov.valor
-                all_coverage_keys[cov.campo_clave] = cov.campo_label
-
-            etiqueta_plan = p.nombre_plan + (f" ({p.variante})" if p.variante else "")
-            columns.append({
-                "id": f"{cid}-{p.id}",
-                "company_id": cid,
-                "nombre": company.nombre_oficial or company.nombre,
-                "logo_url": company.logo_url,
-                "plan_real": etiqueta_plan,
-                "particularidades": p.particularidades,
-                "coberturas": coberturas,
-            })
-
-    # Normalizar: completar coberturas faltantes con "No incluye"
+    # Normalizar coberturas faltantes con "No incluye"
     for col in columns:
         for key in all_coverage_keys:
             col["coberturas"].setdefault(key, "No incluye")
+
+    # En vehículos: las compañías sin plan en los grupos pedidos se muestran como FALTA MANUAL
+    if es_veh and grupos_sel:
+        if not all_coverage_keys:
+            all_coverage_keys = dict(COBERTURAS_ESTANDAR)
+        for cid, company in sin_datos:
+            columns.append({
+                "id": f"{cid}-nomanual",
+                "company_id": cid,
+                "nombre": company.nombre_oficial or company.nombre,
+                "logo_url": company.logo_url,
+                "plan_real": "",
+                "particularidades": None,
+                "falta_manual": True,
+                "coberturas": {key: FALTA_MANUAL for key in all_coverage_keys},
+            })
 
     return {
         "coverage_keys": all_coverage_keys,
