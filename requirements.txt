@@ -5,6 +5,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 pdfplumber
+pypdf
 requests
 beautifulsoup4
 google-generativeai

@@ -220,10 +220,29 @@ def extract_text_from_pdf(pdf_path: Path) -> str:
             raise ValueError("El archivo descargado no es un PDF válido ni contiene texto legible.")
         return text
 
-    # Cortar la lectura temprano: con manuales muy largos, leer el PDF entero
-    # con pdfplumber consume demasiada memoria (Render free = 512MB → el worker
-    # muere sin dejar error). Igual el texto se recorta a MAX_INPUT_CHARS.
     limite = MAX_INPUT_CHARS * 2
+
+    # Primario: pypdf (muy liviano en memoria). pdfplumber renderiza tablas/imágenes
+    # y revienta los 512MB de Render free con PDFs pesados (el worker muere sin log).
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(str(pdf_path))
+        parts = []
+        total = 0
+        for page in reader.pages:
+            t = page.extract_text() or ""
+            if t:
+                parts.append(t)
+                total += len(t)
+            if total >= limite:
+                break
+        text = "\n".join(parts)
+        if text.strip():
+            return text
+    except Exception:
+        pass  # cae al método pesado si pypdf falla
+
+    # Fallback: pdfplumber (más preciso con tablas, pero pesado)
     text_parts = []
     total = 0
     with pdfplumber.open(pdf_path) as pdf:
@@ -232,7 +251,7 @@ def extract_text_from_pdf(pdf_path: Path) -> str:
             if text:
                 text_parts.append(text)
                 total += len(text)
-            page.flush_cache()  # liberar memoria de la página
+            page.flush_cache()
             if total >= limite:
                 break
     return "\n".join(text_parts)
