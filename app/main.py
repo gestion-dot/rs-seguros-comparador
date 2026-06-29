@@ -18,7 +18,8 @@ from .auth import create_token, verify_token, check_credentials
 from .database import get_db, init_db, Company, Branch, Plan, Coverage, SyncLog
 from .drive import list_subfolders, get_file_content_as_pdf_path
 from .web_source import extract_text_from_url
-from .extractor import extract_from_pdf, extract_from_text, QuotaExhaustedError
+from .extractor import extract_from_pdf, extract_from_text, QuotaExhaustedError, DEFAULT_INSTRUCTIONS
+from .database import Setting
 
 app = FastAPI(title="RS Seguros Comparador")
 
@@ -363,6 +364,20 @@ def save_extracted_data(data: dict, db: Session, company: Optional[Company] = No
     db.commit()
 
 
+def get_setting_value(db, key: str, default=None):
+    s = db.query(Setting).filter(Setting.key == key).first()
+    return s.value if s and s.value else default
+
+
+def set_setting_value(db, key: str, value: str):
+    s = db.query(Setting).filter(Setting.key == key).first()
+    if s:
+        s.value = value
+    else:
+        db.add(Setting(key=key, value=value))
+    db.commit()
+
+
 def log_sync(msg: str, kind: str = "info"):
     sync_state["progress"].append({"msg": msg, "type": kind})
 
@@ -378,7 +393,7 @@ def _company_has_data(db, company_name: str) -> bool:
     return False
 
 
-def run_sync(db_session_factory, force: bool = False):
+def run_sync(db_session_factory, force: bool = False, only_company_id: Optional[int] = None):
     from .database import SessionLocal
     db = SessionLocal()
     try:
@@ -391,25 +406,43 @@ def run_sync(db_session_factory, force: bool = False):
         sync_state["started_at"] = datetime.utcnow().isoformat()
         sync_state["finished_at"] = None
 
-        # 1. Sync Drive folders
-        log_sync("🔌 Conectando con Google Drive...", "info")
-        try:
-            subfolders = list_subfolders(DRIVE_FOLDER_ID)
-            log_sync(f"✓ Drive: {len(subfolders)} carpetas encontradas", "ok")
-        except Exception as e:
-            log_sync(f"✗ Error Drive: {e}", "error")
-            subfolders = []
+        # Prompt de extracción configurable (Opciones)
+        instructions = get_setting_value(db, "extraction_prompt")  # None => default del extractor
 
-        # 2. URL-based companies
-        url_companies = db.query(Company).filter(Company.fuente == "url", Company.activa == True).all()
-        if url_companies:
-            log_sync(f"🌐 {len(url_companies)} compañía(s) por URL", "info")
+        drive_names_in_drive = None  # solo se usa en sync completo, para desactivar bajas
 
-        # URL sources first (e.g. LES / La Equidad) so they're guaranteed to load
-        # before the larger Drive batch can exhaust the daily AI quota.
-        all_tasks = [("url", c) for c in url_companies] + [("drive", f) for f in subfolders]
+        if only_company_id is not None:
+            # Sincronización INDIVIDUAL: solo esta compañía (siempre re-extrae)
+            force = True
+            company = db.query(Company).filter(Company.id == only_company_id).first()
+            if not company:
+                log_sync("✗ Compañía no encontrada", "error")
+                all_tasks = []
+            else:
+                log_sync(f"🔄 Sincronizando {company.nombre_oficial or company.nombre}...", "info")
+                if company.fuente == "url":
+                    all_tasks = [("url", company)]
+                else:
+                    all_tasks = [("drive", {"name": company.nombre, "id": company.drive_folder_id})]
+        else:
+            # Sincronización COMPLETA
+            log_sync("🔌 Conectando con Google Drive...", "info")
+            try:
+                subfolders = list_subfolders(DRIVE_FOLDER_ID)
+                log_sync(f"✓ Drive: {len(subfolders)} carpetas encontradas", "ok")
+            except Exception as e:
+                log_sync(f"✗ Error Drive: {e}", "error")
+                subfolders = []
+
+            url_companies = db.query(Company).filter(Company.fuente == "url", Company.activa == True).all()
+            if url_companies:
+                log_sync(f"🌐 {len(url_companies)} compañía(s) por URL", "info")
+
+            # URL primero, luego Drive
+            all_tasks = [("url", c) for c in url_companies] + [("drive", f) for f in subfolders]
+            drive_names_in_drive = {f["name"].upper() for f in subfolders}
+
         sync_state["total"] = len(all_tasks)
-        drive_names_in_drive = {f["name"].upper() for f in subfolders}
 
         for fuente, item in all_tasks:
             try:
@@ -444,7 +477,7 @@ def run_sync(db_session_factory, force: bool = False):
                         continue
 
                     log_sync(f"🤖 {company_name}: analizando con IA...", "processing")
-                    data = extract_from_pdf(pdf_path, company_name)
+                    data = extract_from_pdf(pdf_path, company_name, instructions)
                     save_extracted_data(data, db, company=company)
                     db.commit()
 
@@ -464,7 +497,7 @@ def run_sync(db_session_factory, force: bool = False):
                     log_sync(f"⏳ {company.nombre}: leyendo URL...", "processing")
                     text = extract_text_from_url(company.url_manual)
                     log_sync(f"🤖 {company.nombre}: analizando con IA...", "processing")
-                    data = extract_from_text(text, company.nombre)
+                    data = extract_from_text(text, company.nombre, instructions)
                     save_extracted_data(data, db, company=company)
                     db.commit()
                     ramas = [r.get("rama","?") for r in data.get("ramas",[])]
@@ -475,8 +508,8 @@ def run_sync(db_session_factory, force: bool = False):
 
             except QuotaExhaustedError:
                 log_sync(
-                    "🛑 Cuota diaria de IA (Gemini) agotada. Lo cargado quedó guardado. "
-                    "Volvé a tocar Sincronizar después del reset diario (medianoche hora del Pacífico).",
+                    "🛑 Cuota diaria de IA agotada. Lo cargado quedó guardado. "
+                    "Volvé a sincronizar más tarde.",
                     "error",
                 )
                 break
@@ -490,15 +523,16 @@ def run_sync(db_session_factory, force: bool = False):
 
             sync_state["done"] += 1
 
-        # Deactivate Drive companies no longer in Drive
-        all_drive_companies = db.query(Company).filter(Company.fuente == "drive").all()
-        for c in all_drive_companies:
-            if c.nombre.upper() not in drive_names_in_drive:
-                c.activa = False
-                db.commit()
-                log = SyncLog(company_nombre=c.nombre, accion="deactivated", detalle="No encontrada en Drive")
-                db.add(log)
-                db.commit()
+        # Deactivate Drive companies no longer in Drive (solo en sync completo)
+        if drive_names_in_drive is not None:
+            all_drive_companies = db.query(Company).filter(Company.fuente == "drive").all()
+            for c in all_drive_companies:
+                if c.nombre.upper() not in drive_names_in_drive:
+                    c.activa = False
+                    db.commit()
+                    log = SyncLog(company_nombre=c.nombre, accion="deactivated", detalle="No encontrada en Drive")
+                    db.add(log)
+                    db.commit()
 
         ok = sum(1 for p in sync_state["progress"] if p["type"] == "ok")
         err = sum(1 for p in sync_state["progress"] if p["type"] == "error")
@@ -524,6 +558,34 @@ def trigger_sync(force: bool = False, _=Depends(verify_token)):
     thread.start()
     modo = "completa" if force else "incremental"
     return {"message": f"Sincronización {modo} iniciada"}
+
+
+@app.post("/sync/company/{company_id}")
+def trigger_sync_one(company_id: int, _=Depends(verify_token)):
+    """Sincroniza (re-analiza) UNA sola compañía."""
+    if sync_state["running"]:
+        raise HTTPException(status_code=409, detail="Sincronización en curso")
+    thread = threading.Thread(target=run_sync, args=(None,), kwargs={"only_company_id": company_id}, daemon=True)
+    thread.start()
+    return {"message": "Sincronización individual iniciada"}
+
+
+# ─── Settings (prompt de extracción editable) ─────────────────────────────────
+
+class SettingsBody(BaseModel):
+    extraction_prompt: str
+
+
+@app.get("/settings")
+def get_settings(db: Session = Depends(get_db), _=Depends(verify_token)):
+    val = get_setting_value(db, "extraction_prompt") or DEFAULT_INSTRUCTIONS
+    return {"extraction_prompt": val, "default_prompt": DEFAULT_INSTRUCTIONS}
+
+
+@app.put("/settings")
+def update_settings(body: SettingsBody, db: Session = Depends(get_db), _=Depends(verify_token)):
+    set_setting_value(db, "extraction_prompt", body.extraction_prompt.strip())
+    return {"ok": True}
 
 
 @app.get("/sync/status")

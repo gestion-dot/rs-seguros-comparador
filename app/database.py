@@ -77,6 +77,12 @@ class SyncLog(Base):
     detalle = Column(Text, nullable=True)
 
 
+class Setting(Base):
+    __tablename__ = "app_settings"
+    key = Column(String, primary_key=True)
+    value = Column(Text)
+
+
 def get_db():
     db = SessionLocal()
     try:

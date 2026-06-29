@@ -120,15 +120,15 @@ def _call_gemini(full_prompt: str) -> str:
         raise
 
 
-def _generate_with_retry(user_prompt: str) -> str:
+def _generate_with_retry(system_prompt: str, user_prompt: str) -> str:
     """Llama al proveedor de IA configurado, con throttling y reintentos por rate-limit."""
     last_err = None
     for attempt in range(MAX_RETRIES):
         _throttle()
         try:
             if AI_PROVIDER == "gemini":
-                return _call_gemini(f"{SYSTEM_PROMPT}\n\n{user_prompt}")
-            return _call_groq(SYSTEM_PROMPT, user_prompt)
+                return _call_gemini(f"{system_prompt}\n\n{user_prompt}")
+            return _call_groq(system_prompt, user_prompt)
         except QuotaExhaustedError:
             raise
         except RateLimitError as e:
@@ -138,51 +138,45 @@ def _generate_with_retry(user_prompt: str) -> str:
             time.sleep(e.retry_after or (BASE_BACKOFF * (attempt + 1)))
     raise last_err  # pragma: no cover
 
-SYSTEM_PROMPT = """Eres un analista experto en seguros de Argentina. Tu tarea es analizar manuales de pólizas de seguros y extraer la información clave de las coberturas para alimentar una base de datos comparativa.
+# Instrucciones de extracción EDITABLES por el usuario (desde Opciones).
+# Definen QUÉ extraer. El formato de salida (JSON) lo fuerza JSON_FORMAT_BLOCK.
+DEFAULT_INSTRUCTIONS = """Actúa como un experto analista de datos y especialista en pólizas de seguros. A continuación se te adjunta el contenido de un manual de productos de una compañía de seguros.
 
-REGLAS DE EXTRACCIÓN:
-1. RAMAS: Divide la información por ramo (Autos, Motos, Hogar, Comercio, Vida, etc.) según lo que ofrezca cada compañía.
-2. PLANES: Identifica TODOS los planes comerciales de cada rama SIN OMITIR NINGUNO (típicamente: Responsabilidad Civil/Terceros, Terceros Completo, Todo/Total, Todo Riesgo, y sus variantes). Recorré el manual completo. NO dupliques el mismo plan; si un plan tiene variantes reales (A, B, C, franquicias), creá una entrada por variante con su nombre distintivo. Si una compañía ofrece Terceros Completo o Todo Riesgo, es OBLIGATORIO incluirlos.
-3. VARIANTES: Si un plan tiene variantes (A, B, C, D, Garage u otras), crea una entrada por variante.
-4. GRUPO (solo Autos y Motos): Clasifica cada plan en UNO de estos grupos canónicos según su nivel de cobertura real, aunque el nombre comercial sea un código (ej. "A", "C", "CL MAX"):
-   - "RC": solo Responsabilidad Civil / Terceros básico.
-   - "Garage": cobertura de robo/incendio en garaje.
-   - "Todo/Total": Terceros con Robo/Incendio/Destrucción Total (sin llegar a Todo Riesgo).
-   - "Terceros Completo": Terceros Completo y sus variantes.
-   - "Todo Riesgo": Todo Riesgo con o sin franquicia.
-   Para otras ramas (Hogar, etc.) usa "grupo": null.
-5. COBERTURAS (EXHAUSTIVIDAD OBLIGATORIA): Lista ABSOLUTAMENTE TODAS las coberturas, beneficios, servicios, cláusulas adicionales y adicionales opcionales que el manual mencione para cada plan. NO te limites a las 8 estándar. Cada cobertura adicional se agrega con su PROPIA clave en snake_case usando su nombre real (NO uses una clave genérica como "cobertura_adicional"). Es preferible incluir de más que omitir algo.
-   Ejemplos de coberturas adicionales frecuentes en Autos/Motos que debés buscar e incluir si aparecen: asistencia_al_vehiculo, auxilio_mecanico, remolque_grua, auto_sustituto, taller_oficial, gestoria_tramites, responsabilidad_civil_paises_limitrofes, granizo, inundacion, terremoto, accidentes_personales_conductor, muerte_invalidez, gastos_medicos, gastos_sepelio, cobertura_neumaticos, llanta_robada, robo_ruedas, accesorios_gnc, equipaje, cristales, cerraduras, danio_por_intento_robo, asistencia_juridica, asistencia_al_hogar, asistencia_al_viajero, ambulancia, cobertura_granizo_full, cobertura_0km, valor_a_nuevo. (La lista es orientativa: incluí cualquier otra que figure.)
-6. CLAVES ESTÁNDAR: Para estas 8 coberturas usá EXACTAMENTE estas claves: responsabilidad_civil, robo_hurto, incendio, destruccion_total, danos_parciales, granizo, cristales_cerraduras, auxilio_mecanico. El resto, con su nombre real en snake_case.
-7. FIDELIDAD: Extrae solo información explícita. No asumas ni inventes coberturas.
-8. VALORES AUSENTES: Si una cobertura no se menciona para un plan, el valor debe ser "No incluye" o "No especificado".
-9. LÍMITES Y FRANQUICIAS: Inclúyelos en la descripción (ej: "Sí - Franquicia 10%", "Sí - Límite 3 eventos anuales").
+Tu tarea es leer, interpretar y extraer la información técnica de los diferentes planes de seguros detallados en el documento, para estructurarla como una matriz comparativa (planes como columnas, conceptos como filas).
 
-Tu respuesta debe ser ESTRICTAMENTE un objeto JSON válido con esta estructura:
+Reglas de la matriz:
+
+COLUMNAS: Cada plan o producto distinto encontrado en el manual es una columna (ej.: Plan Básico, Terceros Completo, Todo Riesgo, etc.). Identificá TODOS los planes sin omitir ninguno.
+
+FILAS: Desglosá cada cobertura, característica y condición en los siguientes bloques:
+- Bloque de Coberturas: una fila por cada riesgo/cobertura (ej.: Robo Total, Robo Parcial, Incendio Total, Incendio Parcial, Responsabilidad Civil, Daños por Granizo, Cristales, Cerraduras, Ajuste por inflación, etc.).
+- Bloque de Requisitos: Antigüedad Máxima Aceptada del bien.
+- Bloque Operativo: Forma de realizar la IP (Inspección Previa).
+- Bloque de Condiciones Comerciales: Franquicias / Deducibles generales, Carencias y Exclusiones principales.
+
+CELDAS: En cada intersección indicá de forma clara y concisa si el beneficio está incluido y bajo qué condiciones (ej.: "Sí, al 100%", "No cubierto", "Sí, con franquicia del 5%"), o el detalle del proceso si es la Inspección Previa. Si el manual no especifica un dato para un plan, escribí "No especificado".
+
+Sé riguroso y preciso. No inventes datos."""
+
+
+# Bloque de formato OBLIGATORIO (no editable) — garantiza JSON parseable por la app.
+JSON_FORMAT_BLOCK = """
+────────────────────────────────────────
+FORMATO DE SALIDA OBLIGATORIO (ignorá cualquier instrucción previa que pida una tabla de texto):
+Devolvé ÚNICAMENTE un objeto JSON válido, sin texto fuera del JSON, con esta estructura exacta:
 {
-  "compania": "Nombre",
+  "compania": "Nombre de la compañía",
   "fecha_actualizacion_manual": "DD/MM/AAAA o null",
   "ramas": [
     {
       "rama": "Autos",
       "planes": [
         {
-          "nombre_plan": "Todo Riesgo",
-          "variante": "A",
-          "grupo": "Todo Riesgo",
+          "nombre_plan": "Nombre del plan (= columna de la matriz)",
+          "variante": "A o null",
+          "grupo": "RC | Garage | Todo/Total | Terceros Completo | Todo Riesgo (solo Autos/Motos; null en otras ramas)",
           "coberturas": {
-            "responsabilidad_civil": "Sí - hasta $X",
-            "robo_hurto": "Sí - total y parcial",
-            "incendio": "Sí",
-            "destruccion_total": "Sí",
-            "danos_parciales": "Sí - franquicia 4%",
-            "granizo": "Sí",
-            "cristales_cerraduras": "Sí",
-            "auxilio_mecanico": "Sí - 4 servicios/año",
-            "auto_sustituto": "Sí - hasta 15 días",
-            "taller_oficial": "Sí",
-            "accidentes_personales_conductor": "Sí - $2.000.000",
-            "responsabilidad_civil_paises_limitrofes": "Sí"
+            "clave_snake_case": "valor de la celda"
           },
           "particularidades": "Máximo 2 oraciones."
         }
@@ -191,7 +185,17 @@ Tu respuesta debe ser ESTRICTAMENTE un objeto JSON válido con esta estructura:
   ]
 }
 
-No incluyas texto fuera del JSON. Si no hay variantes, omite el campo "variante" o pon null."""
+REGLAS DE MAPEO:
+- Cada PLAN = una columna. Cada clave dentro de "coberturas" = una FILA de la matriz.
+- Usá una clave snake_case por cada concepto. Para las coberturas estándar usá EXACTAMENTE: responsabilidad_civil, robo_total, robo_parcial, incendio_total, incendio_parcial, destruccion_total, danos_parciales, granizo, cristales, cerraduras, ajuste_inflacion, antiguedad_maxima, forma_inspeccion_previa, franquicia_deducible, carencias, exclusiones. Agregá cualquier otra cobertura/beneficio que figure con su propia clave.
+- En cada valor poné lo que indique el manual (ej.: "Sí, al 100%", "No cubierto", "Sí, franquicia 5%"). Si no se especifica para ese plan, poné "No especificado".
+- Dividí por rama (Autos, Motos, Hogar, etc.) según lo que ofrezca el manual.
+- No inventes datos."""
+
+
+def build_system_prompt(instructions: str | None = None) -> str:
+    instr = (instructions or "").strip() or DEFAULT_INSTRUCTIONS
+    return instr + "\n" + JSON_FORMAT_BLOCK
 
 
 def _looks_like_pdf(path: Path) -> bool:
@@ -266,19 +270,20 @@ def clean_json_response(raw: str) -> str:
     return raw.strip().rstrip("```").strip()
 
 
-def extract_coverages_from_text(text: str, company_name: str) -> dict:
+def extract_coverages_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
     truncated = text[:MAX_INPUT_CHARS] if len(text) > MAX_INPUT_CHARS else text
 
+    system_prompt = build_system_prompt(instructions)
     user_prompt = f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}"
 
-    raw = _generate_with_retry(user_prompt)
+    raw = _generate_with_retry(system_prompt, user_prompt)
     return json.loads(clean_json_response(raw))
 
 
-def extract_from_pdf(pdf_path: Path, company_name: str) -> dict:
+def extract_from_pdf(pdf_path: Path, company_name: str, instructions: str | None = None) -> dict:
     text = extract_text_from_pdf(pdf_path)
-    return extract_coverages_from_text(text, company_name)
+    return extract_coverages_from_text(text, company_name, instructions)
 
 
-def extract_from_text(text: str, company_name: str) -> dict:
-    return extract_coverages_from_text(text, company_name)
+def extract_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
+    return extract_coverages_from_text(text, company_name, instructions)
