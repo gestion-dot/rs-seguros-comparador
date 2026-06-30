@@ -140,21 +140,17 @@ def _generate_with_retry(system_prompt: str, user_prompt: str) -> str:
 
 # Instrucciones de extracción EDITABLES por el usuario (desde Opciones).
 # Definen QUÉ extraer. El formato de salida (JSON) lo fuerza JSON_FORMAT_BLOCK.
-DEFAULT_INSTRUCTIONS = """Actúa como un experto analista de datos y especialista en pólizas de seguros. A continuación se te adjunta el contenido de un manual de productos de una compañía de seguros.
+DEFAULT_INSTRUCTIONS = """Actúa como un experto analista de datos y especialista en pólizas de seguros. Te paso el contenido de un manual de productos de una compañía de seguros.
 
-Tu tarea es leer, interpretar y extraer la información técnica de los diferentes planes de seguros detallados en el documento, para estructurarla como una matriz comparativa (planes como columnas, conceptos como filas).
+Extraé la información técnica de TODOS los planes/productos de seguro del documento, sin omitir ninguno (ej.: Plan Básico, Terceros, Terceros Completo, Todo Riesgo, etc.).
 
-Reglas de la matriz:
+Para CADA plan, extraé el detalle de:
+- COBERTURAS / RIESGOS: Robo Total, Robo Parcial, Incendio Total, Incendio Parcial, Responsabilidad Civil, Daños por Granizo, Cristales, Cerraduras, Ajuste por inflación, y cualquier otra cobertura o beneficio que figure.
+- REQUISITOS: Antigüedad Máxima Aceptada del bien.
+- OPERATIVO: Forma de realizar la Inspección Previa (IP).
+- CONDICIONES COMERCIALES: Franquicias / Deducibles, Carencias y Exclusiones principales.
 
-COLUMNAS: Cada plan o producto distinto encontrado en el manual es una columna (ej.: Plan Básico, Terceros Completo, Todo Riesgo, etc.). Identificá TODOS los planes sin omitir ninguno.
-
-FILAS: Desglosá cada cobertura, característica y condición en los siguientes bloques:
-- Bloque de Coberturas: una fila por cada riesgo/cobertura (ej.: Robo Total, Robo Parcial, Incendio Total, Incendio Parcial, Responsabilidad Civil, Daños por Granizo, Cristales, Cerraduras, Ajuste por inflación, etc.).
-- Bloque de Requisitos: Antigüedad Máxima Aceptada del bien.
-- Bloque Operativo: Forma de realizar la IP (Inspección Previa).
-- Bloque de Condiciones Comerciales: Franquicias / Deducibles generales, Carencias y Exclusiones principales.
-
-CELDAS: En cada intersección indicá de forma clara y concisa si el beneficio está incluido y bajo qué condiciones (ej.: "Sí, al 100%", "No cubierto", "Sí, con franquicia del 5%"), o el detalle del proceso si es la Inspección Previa. Si el manual no especifica un dato para un plan, escribí "No especificado".
+Para cada dato indicá de forma clara y concisa si está incluido y bajo qué condiciones (ej.: "Sí, al 100%", "No cubierto", "Sí, franquicia 5%"), o el detalle del proceso si es la Inspección Previa. Si el manual no especifica un dato para un plan, poné "No especificado".
 
 Sé riguroso y preciso. No inventes datos."""
 
