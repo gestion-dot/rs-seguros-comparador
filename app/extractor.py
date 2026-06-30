@@ -85,12 +85,20 @@ def _call_groq(system: str, user: str) -> str:
         "max_tokens": GROQ_MAX_TOKENS,
         "response_format": {"type": "json_object"},
     }
-    r = requests.post(
-        GROQ_URL,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json=body,
-        timeout=180,
-    )
+    def _post(b):
+        return requests.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=b,
+            timeout=180,
+        )
+
+    r = _post(body)
+    # Si el modo JSON estricto rechaza la salida, reintentar sin response_format
+    # (a veces el modelo razona en texto; sin el modo estricto suele devolver JSON limpio).
+    if r.status_code == 400 and "json_validate_failed" in r.text:
+        body2 = {k: v for k, v in body.items() if k != "response_format"}
+        r = _post(body2)
     if r.status_code == 429:
         if _is_daily_quota_text(r.text):
             raise QuotaExhaustedError(r.text[:400])
@@ -268,9 +276,15 @@ def clean_json_response(raw: str) -> str:
 
 def extract_coverages_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
     truncated = text[:MAX_INPUT_CHARS] if len(text) > MAX_INPUT_CHARS else text
+    # Quitar caracteres de control no imprimibles (PDFs corruptos descarrilan al modelo)
+    truncated = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", truncated)
 
     system_prompt = build_system_prompt(instructions)
-    user_prompt = f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}"
+    user_prompt = (
+        f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}\n\n"
+        "IMPORTANTE: Respondé ÚNICAMENTE con el objeto JSON especificado, "
+        "empezando con { y terminando con }. Nada de texto, tablas ni explicaciones fuera del JSON."
+    )
 
     raw = _generate_with_retry(system_prompt, user_prompt)
     return json.loads(clean_json_response(raw))
