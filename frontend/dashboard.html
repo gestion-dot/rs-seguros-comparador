@@ -386,9 +386,21 @@
                   </div>
                 </td>
                 <template x-for="col in visibleColumns" :key="col.id">
-                  <td class="px-3 py-2 text-center" :class="cellClass(col.coberturas[key])">
-                    <div class="font-bold text-sm" x-text="cellIcon(col.coberturas[key])"></div>
-                    <div class="text-xs mt-0.5 leading-tight opacity-80" x-text="cellText(col.coberturas[key])"></div>
+                  <td class="px-3 py-2 text-center" :class="key==='inspeccion' ? 'bg-blue-50' : cellClass(col.coberturas[key])">
+                    <template x-if="key==='inspeccion'">
+                      <select @change="setInspeccion(col.company_id,$event.target.value)"
+                        class="text-xs border border-blue-300 rounded px-1.5 py-1 bg-white text-blue-800">
+                        <option value="" :selected="!col.coberturas[key]||col.coberturas[key]==='No especificado'">—</option>
+                        <option value="Link digital" :selected="col.coberturas[key]==='Link digital'">Link digital</option>
+                        <option value="Fotos fechadas" :selected="col.coberturas[key]==='Fotos fechadas'">Fotos fechadas</option>
+                      </select>
+                    </template>
+                    <template x-if="key!=='inspeccion'">
+                      <div>
+                        <div class="font-bold text-sm" x-text="cellIcon(col.coberturas[key])"></div>
+                        <div class="text-xs mt-0.5 leading-tight opacity-80" x-text="cellText(col.coberturas[key])"></div>
+                      </div>
+                    </template>
                   </td>
                 </template>
               </tr>
@@ -563,22 +575,23 @@ function app(){return{
     else this.selectedCoverageKeys.push(key);
   },
 
-  cellClass(v){
-    if(v==='FALTA MANUAL PRODUCTO') return 'cell-faltamanual';
-    if(!v||v==='No incluye') return 'cell-no';
-    if(v==='No especificado') return 'cell-unknown';
-    return 'cell-yes';
+  cellKind(v){
+    if(v==='FALTA MANUAL PRODUCTO') return 'fm';
+    const s=(v==null?'':String(v)).toLowerCase().trim();
+    if(s===''||s==='no especificado'||s==='n/d'||s==='nd'||s==='-'||s==='—'||s==='sin datos'||s==='s/d') return 'unknown';
+    if(s==='no'||s.startsWith('no ')||s.includes('no cubierto')||s.includes('no cubre')||s.includes('no incluye')||s.includes('no aplica')||s.includes('no disponible')||s.includes('excluido')||s.includes('sin cobertura')||s.includes('no corresponde')) return 'no';
+    return 'yes';
   },
-  cellIcon(v){
-    if(v==='FALTA MANUAL PRODUCTO') return '⚠';
-    if(!v||v==='No incluye') return '✗';
-    if(v==='No especificado') return '—';
-    return '✓';
-  },
+  cellClass(v){ return ({fm:'cell-faltamanual',no:'cell-no',unknown:'cell-unknown',yes:'cell-yes'})[this.cellKind(v)]; },
+  cellIcon(v){ return ({fm:'⚠',no:'✗',unknown:'—',yes:'✓'})[this.cellKind(v)]; },
   cellText(v){
-    if(v==='FALTA MANUAL PRODUCTO') return 'Falta manual producto';
-    if(!v||v==='No incluye'||v==='No especificado') return '';
-    return v.length>70?v.substring(0,70)+'…':v;
+    const k=this.cellKind(v);
+    if(k==='fm') return 'Falta manual producto';
+    if(k==='unknown') return '';
+    const s=String(v||'');
+    const low=s.toLowerCase();
+    if(k==='no' && (low==='no'||low==='no cubierto'||low==='no cubre'||low==='no incluye')) return '';
+    return s.length>70?s.substring(0,70)+'…':s;
   },
 
   confirmForceSync(){
@@ -592,10 +605,17 @@ function app(){return{
     await this.loadCompanies();  // refrescar lista + inspección
   },
   async setInspeccion(companyId, modo){
-    const r=await api('/companies/'+companyId+'/inspeccion',{method:'PATCH',body:JSON.stringify({inspeccion:modo||null})});
+    const val = modo || null;
+    const r=await api('/companies/'+companyId+'/inspeccion',{method:'PATCH',body:JSON.stringify({inspeccion:val})});
     if(r&&r.ok){
-      const c=this.companies.find(x=>x.id===companyId); if(c) c.inspeccion=modo||null;
-      this.showToast('Inspección actualizada');
+      const c=this.companies.find(x=>x.id===companyId); if(c) c.inspeccion=val;
+      // Reflejar en la tabla actual sin re-comparar
+      if(this.compareResult&&this.compareResult.columns){
+        this.compareResult.columns.forEach(col=>{
+          if(col.company_id===companyId) col.coberturas['inspeccion']=val||'No especificado';
+        });
+      }
+      this.showToast('Inspección: '+(val||'sin definir'));
     }
   },
   async syncOne(companyId){

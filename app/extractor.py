@@ -21,6 +21,7 @@ MAX_RETRIES = 4
 BASE_BACKOFF = 20          # segundos si la API no sugiere retry-after
 INTER_CALL_DELAY = float(os.getenv("INTER_CALL_DELAY", "3"))
 MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "40000"))  # acota tokens por request
+MAX_CHUNKS = int(os.getenv("MAX_CHUNKS", "6"))  # trozos máx por manual (lee el manual completo por partes)
 
 _last_call_ts = [0.0]
 _gemini_model = [None]      # lazy init
@@ -253,7 +254,8 @@ def extract_text_from_pdf(pdf_path: Path) -> str:
             raise ValueError("El archivo descargado no es un PDF válido ni contiene texto legible.")
         return text
 
-    limite = MAX_INPUT_CHARS * 2
+    # Leer suficiente material para alimentar los trozos (manual completo, acotado)
+    limite = MAX_INPUT_CHARS * MAX_CHUNKS
 
     # Primario: pypdf (muy liviano en memoria). pdfplumber renderiza tablas/imágenes
     # y revienta los 512MB de Render free con PDFs pesados (el worker muere sin log).
@@ -299,17 +301,80 @@ def clean_json_response(raw: str) -> str:
     return raw.strip().rstrip("```").strip()
 
 
-def extract_coverages_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
-    # Quitar caracteres de control no imprimibles (PDFs corruptos descarrilan al modelo)
-    clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", text)
-    system_prompt = build_system_prompt(instructions)
+def _norm_key(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return s.lower().strip()
 
-    chars = MAX_INPUT_CHARS
+
+def _informativo(v) -> bool:
+    if not v:
+        return False
+    s = str(v).lower().strip()
+    return s not in ("", "no especificado", "n/d", "nd", "-", "—", "sin datos", "s/d")
+
+
+def _split_text(text: str, size: int) -> list:
+    """Divide el manual en trozos (con pequeño solape) para leerlo completo dentro del límite."""
+    if len(text) <= size:
+        return [text]
+    chunks = []
+    i = 0
+    overlap = 600
+    step = max(size - overlap, 1000)
+    while i < len(text) and len(chunks) < MAX_CHUNKS:
+        chunks.append(text[i:i + size])
+        i += step
+    return chunks
+
+
+def _merge_plan_cov(plan_a: dict, plan_b: dict):
+    ca = plan_a.setdefault("coberturas", {})
+    for k, v in (plan_b.get("coberturas") or {}).items():
+        if _informativo(v) and not _informativo(ca.get(k)):
+            ca[k] = v
+        elif k not in ca:
+            ca[k] = v
+    if not plan_a.get("grupo") and plan_b.get("grupo"):
+        plan_a["grupo"] = plan_b["grupo"]
+    if not plan_a.get("particularidades") and plan_b.get("particularidades"):
+        plan_a["particularidades"] = plan_b["particularidades"]
+
+
+def _merge_data(acc: dict, new: dict) -> dict:
+    """Fusiona la extracción de un trozo con lo acumulado (por rama y nombre de plan)."""
+    if acc is None:
+        return new
+    rama_idx = {_norm_key(r.get("rama", "")): r for r in acc.get("ramas", [])}
+    for nr in new.get("ramas", []):
+        rk = _norm_key(nr.get("rama", ""))
+        if rk in rama_idx:
+            ar = rama_idx[rk]
+            plan_idx = {_norm_key(p.get("nombre_plan", "")): p for p in ar.get("planes", [])}
+            for np_ in nr.get("planes", []):
+                pk = _norm_key(np_.get("nombre_plan", ""))
+                if pk and pk in plan_idx:
+                    _merge_plan_cov(plan_idx[pk], np_)
+                else:
+                    ar.setdefault("planes", []).append(np_)
+                    if pk:
+                        plan_idx[pk] = np_
+        else:
+            acc.setdefault("ramas", []).append(nr)
+            rama_idx[rk] = nr
+    if not acc.get("fecha_actualizacion_manual") and new.get("fecha_actualizacion_manual"):
+        acc["fecha_actualizacion_manual"] = new.get("fecha_actualizacion_manual")
+    return acc
+
+
+def _extract_chunk(system_prompt: str, company_name: str, chunk: str) -> dict:
+    """Extrae un trozo, auto-reduciendo si excede el límite de tokens (413)."""
+    chars = len(chunk)
     last_err = None
     for _ in range(4):
-        truncated = clean[:chars]
+        sub = chunk[:chars]
         user_prompt = (
-            f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}\n\n"
+            f"Compañía: {company_name}\n\nContenido del manual (fragmento):\n\n{sub}\n\n"
             "IMPORTANTE: Respondé ÚNICAMENTE con el objeto JSON especificado, "
             "empezando con { y terminando con }. Nada de texto, tablas ni explicaciones fuera del JSON."
         )
@@ -318,7 +383,6 @@ def extract_coverages_from_text(text: str, company_name: str, instructions: str 
             return json.loads(clean_json_response(raw))
         except RequestTooLargeError as e:
             last_err = e
-            # Reducir el input según el exceso reportado por la API (con margen)
             if e.requested and e.limit:
                 chars = int(chars * (e.limit / e.requested) * 0.85)
             else:
@@ -326,6 +390,30 @@ def extract_coverages_from_text(text: str, company_name: str, instructions: str 
             if chars < 3000:
                 raise
     raise last_err  # pragma: no cover
+
+
+def extract_coverages_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
+    # Quitar caracteres de control no imprimibles (PDFs corruptos descarrilan al modelo)
+    clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", text)
+    system_prompt = build_system_prompt(instructions)
+
+    chunks = _split_text(clean, MAX_INPUT_CHARS)
+    merged = None
+    last_err = None
+    for ch in chunks:
+        try:
+            data = _extract_chunk(system_prompt, company_name, ch)
+            merged = _merge_data(merged, data)
+        except QuotaExhaustedError:
+            raise  # cuota diaria: abortar (lo ya acumulado se descarta arriba)
+        except Exception as e:  # noqa: BLE001 - un trozo problemático no debe tirar todo
+            last_err = e
+            continue
+    if merged is None:
+        if last_err:
+            raise last_err
+        merged = {"compania": company_name, "ramas": []}
+    return merged
 
 
 def extract_from_pdf(pdf_path: Path, company_name: str, instructions: str | None = None) -> dict:
