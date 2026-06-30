@@ -208,22 +208,10 @@
         </div>
       </div>
 
-      <!-- 2 · RAMA (selección única) -->
-      <div x-show="selectedCompanies.length > 0">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">2 · Rama</label>
-        <div class="flex flex-wrap gap-1.5">
-          <template x-for="r in ramas" :key="r">
-            <button @click="selectRama(r)"
-              :class="selectedRama===r?'bg-blue-700 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="r"></button>
-          </template>
-        </div>
-      </div>
-
-      <!-- 3a · GRUPO DE COBERTURA (solo Autos/Motos) - multi-selección -->
-      <div x-show="selectedRama && esVehiculo">
+      <!-- 2 · GRUPO DE COBERTURA (Autos) - multi-selección -->
+      <div x-show="selectedCompanies.length>0 && esVehiculo">
         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-          3 · Tipo de cobertura
+          2 · Tipo de cobertura
           <span class="text-emerald-600 font-normal" x-text="selectedGrupos.length>0 ? '('+selectedGrupos.length+' sel.)' : ''"></span>
         </label>
         <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-emerald-50 hover:bg-emerald-100 mb-1">
@@ -240,19 +228,6 @@
         </div>
       </div>
 
-      <!-- 3b · PLAN (ramas que no son vehículos) -->
-      <div x-show="selectedRama && !esVehiculo">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">3 · Plan</label>
-        <div class="flex flex-wrap gap-1.5">
-          <template x-for="p in planNames" :key="p">
-            <button @click="selectPlan(p)"
-              :class="selectedPlan===p?'bg-emerald-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-              class="px-3 py-1.5 rounded-full text-xs font-medium transition" x-text="p"></button>
-          </template>
-        </div>
-        <p x-show="planNames.length===0" class="text-xs text-gray-400 mt-1">No hay planes para esta rama.</p>
-      </div>
-
       <!-- Compare button -->
       <button x-show="canCompare" @click="compare()" :disabled="loading"
         class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
@@ -260,9 +235,33 @@
         <span x-show="loading">Cargando...</span>
       </button>
 
+      <!-- 3 · PLANES disponibles (visible después de comparar) -->
+      <div x-show="columns.length > 0">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          3 · Planes a mostrar
+          <span class="text-blue-600 font-normal" x-text="'('+visibleColumns.length+'/'+columns.length+')'"></span>
+        </label>
+        <div class="space-y-0.5 max-h-72 overflow-y-auto border border-gray-100 rounded-lg p-1">
+          <template x-for="col in columns" :key="col.id">
+            <label class="flex items-start gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+              <input type="checkbox" :checked="!hiddenColumns.includes(col.id)" @change="togglePlan(col.id)" class="rounded text-blue-600 shrink-0 mt-0.5">
+              <span class="text-xs leading-tight">
+                <span class="text-gray-700 font-medium" x-text="col.nombre"></span>
+                <span class="text-gray-400 block" x-show="col.plan_real" x-text="col.plan_real"></span>
+              </span>
+            </label>
+          </template>
+        </div>
+        <div class="flex gap-3 mt-1">
+          <button @click="hiddenColumns=[]" class="text-xs text-blue-600 hover:underline">Todos</button>
+          <span class="text-gray-200">|</span>
+          <button @click="hiddenColumns=columns.map(c=>c.id)" class="text-xs text-gray-400 hover:underline">Ninguno</button>
+        </div>
+      </div>
+
       <!-- Coberturas filter (visible after compare) -->
       <div x-show="allCoverageKeys.length > 0">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Coberturas a mostrar</label>
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">4 · Coberturas a mostrar</label>
         <input x-model="coverageSearch" type="text" placeholder="Buscar cobertura..."
           class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
         <div class="space-y-1 max-h-52 overflow-y-auto">
@@ -305,7 +304,7 @@
       <svg class="w-16 h-16 mb-4 opacity-25" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/>
       </svg>
-      <p class="text-base font-medium text-gray-500">Elegí compañías, luego la rama y el tipo de cobertura</p>
+      <p class="text-base font-medium text-gray-500">Elegí las compañías y el tipo de cobertura</p>
       <p class="text-sm mt-1 text-gray-400" x-show="companies.length===0">Si la base está vacía, primero hacé clic en <strong>Sincronizar</strong></p>
     </div>
 
@@ -322,18 +321,7 @@
       <!-- Estado vacío: ninguna compañía aporta datos -->
       <div x-show="visibleColumns.length===0" class="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
         <p class="font-medium text-gray-600">Ninguna de las compañías elegidas tiene planes en <span class="font-bold" x-text="currentTitle"></span>.</p>
-        <p class="text-sm mt-1 text-gray-400">Probá con otro tipo de cobertura, otra rama, o sumá más compañías.</p>
-      </div>
-
-      <!-- Columnas ocultas -->
-      <div x-show="hiddenColumns.length>0" class="mb-3 flex items-center gap-2 flex-wrap text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-        <span class="text-amber-700 font-medium" x-text="hiddenColumns.length+' columna(s) oculta(s):'"></span>
-        <template x-for="col in hiddenColumnsData" :key="col.id">
-          <button @click="showColumn(col.id)" class="bg-white border border-amber-300 text-amber-700 px-2 py-0.5 rounded-full hover:bg-amber-100 transition">
-            + <span x-text="col.nombre"></span>
-          </button>
-        </template>
-        <button @click="hiddenColumns=[]" class="text-amber-600 underline ml-1">Mostrar todas</button>
+        <p class="text-sm mt-1 text-gray-400">Probá con otro tipo de cobertura o sumá más compañías.</p>
       </div>
 
       <!-- Comparison table -->
@@ -461,6 +449,9 @@ function app(){return{
   async init(){
     if(!token()){window.location.href='/';return;}
     await Promise.all([this.loadCompanies(), this.loadRamas()]);
+    // Rama fija: Autos (todos los manuales son de autos) → no hay selector de rama
+    const autos=this.ramas.find(r=>/auto/i.test(r))||this.ramas[0]||'Autos';
+    await this.selectRama(autos);
   },
 
   async loadCompanies(){
@@ -553,6 +544,7 @@ function app(){return{
   },
   hideColumn(id){ if(!this.hiddenColumns.includes(id)) this.hiddenColumns.push(id); },
   showColumn(id){ const i=this.hiddenColumns.indexOf(id); if(i>=0) this.hiddenColumns.splice(i,1); },
+  togglePlan(id){ const i=this.hiddenColumns.indexOf(id); if(i>=0) this.hiddenColumns.splice(i,1); else this.hiddenColumns.push(id); },
   // Los logos cargados ya incluyen el nombre de la compañía → no repetir el nombre debajo.
   logoConNombre(url){ return !!url; },
 
