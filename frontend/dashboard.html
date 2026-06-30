@@ -346,13 +346,15 @@
                 <th class="p-0 min-w-[168px] relative align-top">
                   <button @click="hideColumn(col.id)" title="Ocultar columna"
                     class="absolute top-1 right-1 text-slate-400 hover:text-red-400 text-xs leading-none w-4 h-4 z-10">✕</button>
-                  <!-- Recuadro azul: SOLO el logo -->
-                  <div class="bg-slate-800 px-3 py-3 flex items-center justify-center" style="min-height:58px">
+                  <!-- Recuadro azul: SOLO el logo, ocupando todo el espacio -->
+                  <div class="bg-slate-800 p-1.5 flex items-center justify-center">
                     <template x-if="col.logo_url">
-                      <img :src="col.logo_url" class="h-11 w-auto object-contain max-w-[150px] bg-white rounded px-2 py-1" :alt="col.nombre"
-                           onerror="this.style.display='none'">
+                      <span class="bg-white rounded w-full flex items-center justify-center px-2" style="height:50px">
+                        <img :src="col.logo_url" class="max-h-[46px] max-w-full w-auto object-contain" :alt="col.nombre"
+                             onerror="this.style.display='none'">
+                      </span>
                     </template>
-                    <span class="text-sm font-bold text-white leading-tight text-center" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
+                    <span class="text-sm font-bold text-white leading-tight text-center py-3" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
                   </div>
                   <!-- Fila aparte: nombre del plan -->
                   <div class="bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-600 leading-tight text-center border-b border-slate-200"
@@ -573,7 +575,7 @@ function app(){return{
   detailText(key,v){
     if(key==='responsabilidad_civil') return '';
     const k=this.cellKind(v);
-    if(k==='fm') return 'Falta manual producto';
+    if(k==='fm') return 'Falta manual';
     if(k==='yes') return this.cellText(v);
     return '';
   },
@@ -584,7 +586,7 @@ function app(){return{
   },
   cellText(v){
     const k=this.cellKind(v);
-    if(k==='fm') return 'Falta manual producto';
+    if(k==='fm') return 'Falta manual';
     if(k==='unknown') return '';
     let s=String(v||'');
     const low=s.toLowerCase();
@@ -696,10 +698,10 @@ function app(){return{
 
     const colHeaders=cos.map(c=>{
       const src=logoData[c.id]||c.logo_url;
-      const logo=src?`<img src="${src}" style="height:42px;max-width:150px;object-fit:contain;background:#fff;border-radius:4px;padding:4px 6px;">`:`<div style="font-size:12px;font-weight:700;color:#fff;">${c.nombre}</div>`;
+      const logo=src?`<span style="display:flex;align-items:center;justify-content:center;background:#fff;border-radius:4px;width:100%;height:50px;padding:0 8px;box-sizing:border-box;"><img src="${src}" style="max-height:46px;max-width:100%;object-fit:contain;"></span>`:`<div style="font-size:12px;font-weight:700;color:#fff;padding:14px 0;">${c.nombre}</div>`;
       const plan=c.plan_real||'—';
       return`<th style="padding:0;border:1px solid #2d4f7a;min-width:150px;vertical-align:top;">
-        <div style="background:#1e3a5f;padding:10px 12px;display:flex;align-items:center;justify-content:center;min-height:56px;">${logo}</div>
+        <div style="background:#1e3a5f;padding:6px;display:flex;align-items:center;justify-content:center;">${logo}</div>
         <div style="background:#e2e8f0;padding:5px 8px;font-size:10px;font-weight:600;color:#475569;text-align:center;">${plan}</div>
       </th>`;
     }).join('');
@@ -716,7 +718,7 @@ function app(){return{
         }
         const kind=this.cellKind(v);
         let bg,col,icon,txt='';
-        if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual producto</div>`;}
+        if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual</div>`;}
         else if(kind==='no'){bg='#fee2e2';col='#991b1b';icon='✗';}
         else if(kind==='unknown'){bg='#f3f4f6';col='#6b7280';icon='—';}
         else{bg='#dcfce7';col='#166534';icon='✓'; if(k!=='responsabilidad_civil'){const t=this.cellText(v); if(t){icon=''; txt=`<div style="font-size:10px;color:#166534;font-weight:600;line-height:1.2;">${t.length>90?t.substring(0,90)+'…':t}</div>`;}}}
