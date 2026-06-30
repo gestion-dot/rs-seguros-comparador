@@ -348,19 +348,22 @@
         <table id="compare-table" class="min-w-full text-xs border-collapse">
           <thead>
             <tr>
-              <th class="px-3 py-2 text-left text-xs font-bold text-gray-500 bg-gray-50 uppercase tracking-wide w-40 sticky left-0 z-10">Cobertura</th>
+              <th class="px-3 py-2 text-left text-xs font-bold text-gray-500 bg-gray-50 uppercase tracking-wide w-40 sticky left-0 z-10 align-middle">Cobertura</th>
               <template x-for="col in visibleColumns" :key="col.id">
-                <th class="px-2 py-2 text-center bg-slate-800 min-w-[168px] relative align-middle">
+                <th class="p-0 min-w-[168px] relative align-top">
                   <button @click="hideColumn(col.id)" title="Ocultar columna"
-                    class="absolute top-1 right-1 text-slate-400 hover:text-red-400 text-xs leading-none w-4 h-4">✕</button>
-                  <div class="flex flex-col items-center gap-1">
+                    class="absolute top-1 right-1 text-slate-400 hover:text-red-400 text-xs leading-none w-4 h-4 z-10">✕</button>
+                  <!-- Recuadro azul: SOLO el logo -->
+                  <div class="bg-slate-800 px-3 py-3 flex items-center justify-center" style="min-height:58px">
                     <template x-if="col.logo_url">
-                      <img :src="col.logo_url" class="h-9 w-auto object-contain max-w-[130px] bg-white rounded px-1.5 py-0.5" :alt="col.nombre"
+                      <img :src="col.logo_url" class="h-11 w-auto object-contain max-w-[150px] bg-white rounded px-2 py-1" :alt="col.nombre"
                            onerror="this.style.display='none'">
                     </template>
-                    <span class="text-xs font-bold text-white leading-tight" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
-                    <span class="text-[11px] font-normal text-slate-300 leading-tight" x-show="col.plan_real" x-text="col.plan_real"></span>
+                    <span class="text-sm font-bold text-white leading-tight text-center" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
                   </div>
+                  <!-- Fila aparte: nombre del plan -->
+                  <div class="bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-600 leading-tight text-center border-b border-slate-200"
+                       x-text="col.plan_real||'—'"></div>
                 </th>
               </template>
             </tr>
@@ -381,9 +384,9 @@
                       <span class="text-[11px] leading-tight" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto') ? col.coberturas[key] : '—'"></span>
                     </template>
                     <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
-                      <div>
-                        <div class="font-bold text-[13px] leading-none" x-text="cellIcon(col.coberturas[key])"></div>
-                        <div class="text-[11px] mt-0.5 leading-tight opacity-80" x-text="key==='responsabilidad_civil' ? '' : cellText(col.coberturas[key])"></div>
+                      <div class="leading-tight">
+                        <span x-show="showIcon(key, col.coberturas[key])" class="font-bold text-[13px] leading-none" x-text="cellIcon(col.coberturas[key])"></span>
+                        <span x-show="detailText(key, col.coberturas[key])" class="block text-[11px] leading-tight opacity-80" x-text="detailText(key, col.coberturas[key])"></span>
                       </div>
                     </template>
                   </td>
@@ -573,6 +576,19 @@ function app(){return{
   },
   cellClass(v){ return ({fm:'cell-faltamanual',no:'cell-no',unknown:'cell-unknown',yes:'cell-yes'})[this.cellKind(v)]; },
   cellIcon(v){ return ({fm:'⚠',no:'✗',unknown:'—',yes:'✓'})[this.cellKind(v)]; },
+  // Texto de detalle a mostrar dentro de la celda (solo para coberturas cubiertas o falta-manual)
+  detailText(key,v){
+    if(key==='responsabilidad_civil') return '';
+    const k=this.cellKind(v);
+    if(k==='fm') return 'Falta manual producto';
+    if(k==='yes') return this.cellText(v);
+    return '';
+  },
+  // El tilde solo se muestra cuando NO hay una oración de detalle
+  showIcon(key,v){
+    if(this.cellKind(v)==='yes') return !this.detailText(key,v);
+    return true;
+  },
   cellText(v){
     const k=this.cellKind(v);
     if(k==='fm') return 'Falta manual producto';
@@ -672,10 +688,12 @@ function app(){return{
     const today=new Date().toLocaleDateString('es-AR');
 
     const colHeaders=cos.map(c=>{
-      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:46px;max-width:120px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;margin:0 auto 4px;" onerror="this.style.display='none'">`:'' ;
-      const nombreTxt=this.logoConNombre(c.logo_url)?'':`<div style="font-size:11px;font-weight:700;">${c.nombre}</div>`;
-      const planTxt=c.plan_real?`<div style="font-size:9px;font-weight:400;color:#cbd5e1;margin-top:2px;">${c.plan_real}</div>`:'';
-      return`<th style="padding:10px 12px;text-align:center;background:#1e3a5f;color:white;border:1px solid #2d4f7a;min-width:130px;">${logo}${nombreTxt}${planTxt}</th>`;
+      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:42px;max-width:150px;object-fit:contain;background:#fff;border-radius:4px;padding:4px 6px;" onerror="this.style.display='none'">`:`<div style="font-size:12px;font-weight:700;color:#fff;">${c.nombre}</div>`;
+      const plan=c.plan_real||'—';
+      return`<th style="padding:0;border:1px solid #2d4f7a;min-width:150px;vertical-align:top;">
+        <div style="background:#1e3a5f;padding:10px 12px;display:flex;align-items:center;justify-content:center;min-height:56px;">${logo}</div>
+        <div style="background:#e2e8f0;padding:5px 8px;font-size:10px;font-weight:600;color:#475569;text-align:center;">${plan}</div>
+      </th>`;
     }).join('');
 
     const rows=keys.map(k=>{
@@ -693,8 +711,9 @@ function app(){return{
         if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual producto</div>`;}
         else if(kind==='no'){bg='#fee2e2';col='#991b1b';icon='✗';}
         else if(kind==='unknown'){bg='#f3f4f6';col='#6b7280';icon='—';}
-        else{bg='#dcfce7';col='#166534';icon='✓'; if(k!=='responsabilidad_civil'){const t=this.cellText(v); if(t) txt=`<div style="font-size:10px;color:#374151;margin-top:2px;">${t.length>65?t.substring(0,65)+'…':t}</div>`;}}
-        return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;"><div style="font-weight:700;font-size:15px;color:${col};">${icon}</div>${txt}</td>`;
+        else{bg='#dcfce7';col='#166534';icon='✓'; if(k!=='responsabilidad_civil'){const t=this.cellText(v); if(t){icon=''; txt=`<div style="font-size:10px;color:#166534;font-weight:600;line-height:1.2;">${t.length>90?t.substring(0,90)+'…':t}</div>`;}}}
+        const iconHtml=icon?`<div style="font-weight:700;font-size:15px;color:${col};line-height:1;">${icon}</div>`:'';
+        return`<td style="padding:7px 9px;text-align:center;background:${bg};border:1px solid #e2e8f0;">${iconHtml}${txt}</td>`;
       }).join('');
       return`<tr><td style="padding:8px 12px;font-size:11px;font-weight:600;color:#374151;border:1px solid #e2e8f0;background:#f8fafc;">${label}</td>${cells}</tr>`;
     }).join('');
