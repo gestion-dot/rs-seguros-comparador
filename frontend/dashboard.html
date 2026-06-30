@@ -376,7 +376,7 @@
                   <td class="px-2 py-1 text-center"
                     :class="key==='inspeccion' ? 'bg-blue-50 text-blue-800 font-medium' : (key==='antiguedad_maxima' ? 'bg-slate-50 text-slate-700 font-medium' : cellClass(col.coberturas[key]))">
                     <template x-if="key==='inspeccion' || key==='antiguedad_maxima'">
-                      <span class="text-[11px] leading-tight" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto') ? col.coberturas[key] : '—'"></span>
+                      <span class="text-[11px] leading-tight" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto'&&col.coberturas[key]!=='FALTA MANUAL PRODUCTO') ? col.coberturas[key] : '–'"></span>
                     </template>
                     <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
                       <div class="leading-tight">
@@ -570,12 +570,11 @@ function app(){return{
     return 'yes';
   },
   cellClass(v){ return ({fm:'cell-faltamanual',no:'cell-no',unknown:'cell-unknown',yes:'cell-yes'})[this.cellKind(v)]; },
-  cellIcon(v){ return ({fm:'⚠',no:'✗',unknown:'—',yes:'✓'})[this.cellKind(v)]; },
-  // Texto de detalle a mostrar dentro de la celda (solo para coberturas cubiertas o falta-manual)
+  cellIcon(v){ return ({fm:'–',no:'✗',unknown:'—',yes:'✓'})[this.cellKind(v)]; },
+  // Texto de detalle a mostrar dentro de la celda (solo para coberturas cubiertas)
   detailText(key,v){
     if(key==='responsabilidad_civil') return '';
     const k=this.cellKind(v);
-    if(k==='fm') return 'Falta manual';
     if(k==='yes') return this.cellText(v);
     return '';
   },
@@ -712,13 +711,13 @@ function app(){return{
         const v=c.coberturas[k]||'No incluye';
         // Campos de dato (texto, sin tilde): antigüedad e inspección
         if(k==='antiguedad_maxima'||k==='inspeccion'){
-          const dato=(v&&v!=='No especificado'&&v!=='No cubierto')?v:'—';
+          const dato=(v&&v!=='No especificado'&&v!=='No cubierto'&&v!=='FALTA MANUAL PRODUCTO')?v:'–';
           const bg=k==='inspeccion'?'#eff6ff':'#f8fafc', colr=k==='inspeccion'?'#1e40af':'#334155';
           return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;font-size:10px;font-weight:600;color:${colr};">${dato}</td>`;
         }
         const kind=this.cellKind(v);
         let bg,col,icon,txt='';
-        if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual</div>`;}
+        if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='–';}
         else if(kind==='no'){bg='#fee2e2';col='#991b1b';icon='✗';}
         else if(kind==='unknown'){bg='#f3f4f6';col='#6b7280';icon='—';}
         else{bg='#dcfce7';col='#166534';icon='✓'; if(k!=='responsabilidad_civil'){const t=this.cellText(v); if(t){icon=''; txt=`<div style="font-size:10px;color:#166534;font-weight:600;line-height:1.2;">${t.length>90?t.substring(0,90)+'…':t}</div>`;}}}
