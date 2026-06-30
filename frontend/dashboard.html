@@ -134,33 +134,14 @@
       <button @click="showOptions=false" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
     </div>
 
-    <div class="overflow-y-auto px-6 py-5 space-y-7">
+    <div class="overflow-y-auto px-6 py-5 space-y-6">
 
-      <!-- Prompt de análisis -->
       <section>
-        <div class="flex items-center justify-between mb-2">
-          <h4 class="font-semibold text-gray-700 text-sm">Prompt de análisis de manuales</h4>
-          <button @click="restorePrompt()" class="text-xs text-gray-400 hover:text-blue-600">Restaurar por defecto</button>
-        </div>
-        <p class="text-xs text-gray-400 mb-2">Define qué datos extrae la IA de cada manual. El formato (tabla comparable) lo arma el sistema automáticamente.</p>
-        <textarea x-model="promptText" rows="12"
-          class="w-full border border-gray-300 rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
-        <div class="flex items-center gap-3 mt-2">
-          <button @click="savePrompt()" :disabled="savingPrompt"
-            class="bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold px-5 py-2 rounded-lg transition disabled:opacity-50">
-            <span x-text="savingPrompt ? 'Guardando...' : 'Guardar prompt'"></span>
-          </button>
-          <span x-show="promptSaved" class="text-xs text-emerald-600">✓ Guardado. Se usará en la próxima sincronización.</span>
-        </div>
-      </section>
-
-      <!-- Sincronización por compañía -->
-      <section>
-        <h4 class="font-semibold text-gray-700 text-sm mb-1">Sincronización por compañía</h4>
-        <p class="text-xs text-gray-400 mb-3">Re-analiza el manual de una sola compañía (sin correr todas).</p>
-        <div class="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-72 overflow-y-auto">
+        <h4 class="font-semibold text-gray-700 text-sm mb-1">Compañías</h4>
+        <p class="text-xs text-gray-400 mb-3">Re-analizá el manual de una compañía (verifica las coberturas fijas de Autos/Motos contra el manual) y elegí su modo de inspección.</p>
+        <div class="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
           <template x-for="c in companies" :key="c.id">
-            <div class="flex items-center justify-between px-3 py-2">
+            <div class="flex items-center justify-between gap-3 px-3 py-2.5">
               <div class="flex items-center gap-2 min-w-0">
                 <template x-if="c.logo_url">
                   <img :src="c.logo_url" class="h-6 w-6 object-contain bg-white rounded" onerror="this.style.display='none'">
@@ -170,11 +151,19 @@
                   <div class="text-[10px] text-gray-400" x-text="c.ultima_sync ? 'Últ.: '+new Date(c.ultima_sync).toLocaleString('es-AR') : 'Sin sincronizar'"></div>
                 </div>
               </div>
-              <button @click="syncOne(c.id)" :disabled="syncing"
-                class="shrink-0 flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                Sincronizar
-              </button>
+              <div class="flex items-center gap-2 shrink-0">
+                <select @change="setInspeccion(c.id, $event.target.value)"
+                  class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white" title="Modo de inspección">
+                  <option value="" :selected="!c.inspeccion">Inspección…</option>
+                  <option value="Link digital" :selected="c.inspeccion==='Link digital'">Link digital</option>
+                  <option value="Fotos fechadas" :selected="c.inspeccion==='Fotos fechadas'">Fotos fechadas</option>
+                </select>
+                <button @click="syncOne(c.id)" :disabled="syncing"
+                  class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  Sincronizar
+                </button>
+              </div>
             </div>
           </template>
         </div>
@@ -441,7 +430,7 @@ function app(){return{
   syncTotal:0, syncDone:0, syncCurrent:'', syncError:null,
   toast:'', showAddUrl:false,
   newCo:{nombre:'',url:'',logo:''},
-  showOptions:false, promptText:'', defaultPrompt:'', savingPrompt:false, promptSaved:false,
+  showOptions:false,
 
   get filteredCompanies(){
     const q=this.companySearch.toLowerCase();
@@ -599,17 +588,15 @@ function app(){return{
 
   // ── Opciones ──
   async openOptions(){
-    this.showOptions=true; this.promptSaved=false;
-    const r=await api('/settings');
-    if(r&&r.ok){ const d=await r.json(); this.promptText=d.extraction_prompt||''; this.defaultPrompt=d.default_prompt||''; }
+    this.showOptions=true;
+    await this.loadCompanies();  // refrescar lista + inspección
   },
-  restorePrompt(){ this.promptText=this.defaultPrompt; this.promptSaved=false; },
-  async savePrompt(){
-    this.savingPrompt=true; this.promptSaved=false;
-    try{
-      const r=await api('/settings',{method:'PUT',body:JSON.stringify({extraction_prompt:this.promptText})});
-      if(r&&r.ok){ this.promptSaved=true; this.showToast('Prompt guardado'); }
-    }finally{ this.savingPrompt=false; }
+  async setInspeccion(companyId, modo){
+    const r=await api('/companies/'+companyId+'/inspeccion',{method:'PATCH',body:JSON.stringify({inspeccion:modo||null})});
+    if(r&&r.ok){
+      const c=this.companies.find(x=>x.id===companyId); if(c) c.inspeccion=modo||null;
+      this.showToast('Inspección actualizada');
+    }
   },
   async syncOne(companyId){
     const r=await api('/sync/company/'+companyId,{method:'POST'});

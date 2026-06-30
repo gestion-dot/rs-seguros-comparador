@@ -162,60 +162,69 @@ def _generate_with_retry(system_prompt: str, user_prompt: str) -> str:
             time.sleep(e.retry_after or (BASE_BACKOFF * (attempt + 1)))
     raise last_err  # pragma: no cover
 
-# Instrucciones de extracción EDITABLES por el usuario (desde Opciones).
-# Definen QUÉ extraer. El formato de salida (JSON) lo fuerza JSON_FORMAT_BLOCK.
-DEFAULT_INSTRUCTIONS = """Actúa como un experto analista de datos y especialista en pólizas de seguros. Te paso el contenido de un manual de productos de una compañía de seguros.
+# Coberturas FIJAS para Autos y Motos (clave canónica, etiqueta para mostrar).
+# La IA SOLO verifica estas contra el manual; no inventa ni omite.
+# "inspeccion" NO está acá: la define el usuario a mano (no sale del manual).
+COBERTURAS_VEHICULO = [
+    ("responsabilidad_civil", "Responsabilidad Civil"),
+    ("robo_total", "Robo Total"),
+    ("robo_parcial", "Robo Parcial"),
+    ("incendio_total", "Incendio Total"),
+    ("incendio_parcial", "Incendio Parcial"),
+    ("dano_parcial", "Daño Parcial"),
+    ("dano_parcial_robo_total_sin_franquicia", "Daño Parcial a consecuencia de Robo Total - Sin franquicia"),
+    ("dano_parcial_con_franquicia", "Daño Parcial con Franquicia"),
+    ("antiguedad_maxima", "Antigüedad Máxima"),
+    ("cerraduras", "Cerraduras"),
+    ("luneta_parabrisas", "Luneta y Parabrisas"),
+    ("cristales_laterales", "Cristales Laterales"),
+    ("granizo", "Granizo"),
+    ("reposicion_0km", "Reposición 0 KM"),
+    ("inundacion", "Inundación"),
+    ("asistencia_mecanica_remolque", "Asistencia Mecánica y Remolque (eventos/año y km)"),
+]
 
-Extraé la información técnica de TODOS los planes/productos de seguro del documento, sin omitir ninguno (ej.: Plan Básico, Terceros, Terceros Completo, Todo Riesgo, etc.).
+_LISTA_COB = "\n".join(f'- "{k}": {lbl}' for k, lbl in COBERTURAS_VEHICULO)
 
-Para CADA plan, extraé el detalle de:
-- COBERTURAS / RIESGOS: Robo Total, Robo Parcial, Incendio Total, Incendio Parcial, Responsabilidad Civil, Daños por Granizo, Cristales, Cerraduras, Ajuste por inflación, y cualquier otra cobertura o beneficio que figure.
-- REQUISITOS: Antigüedad Máxima Aceptada del bien.
-- OPERATIVO: Forma de realizar la Inspección Previa (IP).
-- CONDICIONES COMERCIALES: Franquicias / Deducibles, Carencias y Exclusiones principales.
+SYSTEM_PROMPT = f"""Sos un analista experto en pólizas de seguros de Argentina. Te paso el contenido de un manual de productos de una compañía.
 
-Para cada dato indicá de forma clara y concisa si está incluido y bajo qué condiciones (ej.: "Sí, al 100%", "No cubierto", "Sí, franquicia 5%"), o el detalle del proceso si es la Inspección Previa. Si el manual no especifica un dato para un plan, poné "No especificado".
+Tu tarea: identificar TODOS los planes/productos de AUTOS y MOTOS del manual (ej.: Responsabilidad Civil, Terceros Completo, Todo Riesgo, y sus variantes) y, para CADA plan, verificar contra el manual ÚNICAMENTE estas coberturas (ninguna otra):
+{_LISTA_COB}
 
-Sé riguroso y preciso. No inventes datos."""
+Para cada cobertura de cada plan, el valor debe decir si está incluida y bajo qué condición:
+- "Sí" o "Sí, al 100%" si está cubierta sin más detalle.
+- "Sí, franquicia X%" o "Sí, hasta $X" si hay condiciones/límites.
+- En "asistencia_mecanica_remolque" indicá la cantidad de eventos al año y el kilometraje cubierto si figuran.
+- En "antiguedad_maxima" indicá la antigüedad máxima del vehículo aceptada.
+- "No cubierto" si el manual dice que no se cubre.
+- "No especificado" si el manual no menciona ese dato para ese plan.
 
+Para ramas que NO sean Autos/Motos (Hogar, etc.), extraé las coberturas que figuren con nombres claros en snake_case.
 
-# Bloque de formato OBLIGATORIO (no editable) — garantiza JSON parseable por la app.
-JSON_FORMAT_BLOCK = """
-────────────────────────────────────────
-FORMATO DE SALIDA OBLIGATORIO (ignorá cualquier instrucción previa que pida una tabla de texto):
-Devolvé ÚNICAMENTE un objeto JSON válido, sin texto fuera del JSON, con esta estructura exacta:
-{
-  "compania": "Nombre de la compañía",
+FORMATO DE SALIDA OBLIGATORIO: devolvé ÚNICAMENTE un objeto JSON válido (sin texto, sin tablas, fuera del JSON), con esta estructura:
+{{
+  "compania": "Nombre",
   "fecha_actualizacion_manual": "DD/MM/AAAA o null",
   "ramas": [
-    {
+    {{
       "rama": "Autos",
       "planes": [
-        {
-          "nombre_plan": "Nombre del plan (= columna de la matriz)",
+        {{
+          "nombre_plan": "Nombre del plan",
           "variante": "A o null",
           "grupo": "RC | Garage | Todo/Total | Terceros Completo | Todo Riesgo (solo Autos/Motos; null en otras ramas)",
-          "coberturas": {
-            "clave_snake_case": "valor de la celda"
-          },
+          "coberturas": {{ "responsabilidad_civil": "Sí, al 100%", "robo_total": "Sí", "...": "..." }},
           "particularidades": "Máximo 2 oraciones."
-        }
+        }}
       ]
-    }
+    }}
   ]
-}
-
-REGLAS DE MAPEO:
-- Cada PLAN = una columna. Cada clave dentro de "coberturas" = una FILA de la matriz.
-- Usá una clave snake_case por cada concepto. Para las coberturas estándar usá EXACTAMENTE: responsabilidad_civil, robo_total, robo_parcial, incendio_total, incendio_parcial, destruccion_total, danos_parciales, granizo, cristales, cerraduras, ajuste_inflacion, antiguedad_maxima, forma_inspeccion_previa, franquicia_deducible, carencias, exclusiones. Agregá cualquier otra cobertura/beneficio que figure con su propia clave.
-- En cada valor poné lo que indique el manual (ej.: "Sí, al 100%", "No cubierto", "Sí, franquicia 5%"). Si no se especifica para ese plan, poné "No especificado".
-- Dividí por rama (Autos, Motos, Hogar, etc.) según lo que ofrezca el manual.
-- No inventes datos."""
+}}
+En Autos/Motos usá EXACTAMENTE las claves listadas arriba (todas, aunque el valor sea "No especificado"). No inventes datos."""
 
 
 def build_system_prompt(instructions: str | None = None) -> str:
-    instr = (instructions or "").strip() or DEFAULT_INSTRUCTIONS
-    return instr + "\n" + JSON_FORMAT_BLOCK
+    return SYSTEM_PROMPT
 
 
 def _looks_like_pdf(path: Path) -> bool:

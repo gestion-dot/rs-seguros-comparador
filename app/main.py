@@ -18,8 +18,7 @@ from .auth import create_token, verify_token, check_credentials
 from .database import get_db, init_db, Company, Branch, Plan, Coverage, SyncLog
 from .drive import list_subfolders, get_file_content_as_pdf_path
 from .web_source import extract_text_from_url
-from .extractor import extract_from_pdf, extract_from_text, QuotaExhaustedError, DEFAULT_INSTRUCTIONS
-from .database import Setting
+from .extractor import extract_from_pdf, extract_from_text, QuotaExhaustedError, COBERTURAS_VEHICULO
 
 app = FastAPI(title="RS Seguros Comparador")
 
@@ -76,6 +75,7 @@ def get_companies(db: Session = Depends(get_db), _=Depends(verify_token)):
             "nombre": c.nombre_oficial or c.nombre,
             "fuente": c.fuente,
             "logo_url": c.logo_url,
+            "inspeccion": c.inspeccion,
             "ultima_sync": c.ultima_sync.isoformat() if c.ultima_sync else None,
             "ramas": list({b.rama for b in c.branches}),
         }
@@ -234,11 +234,13 @@ def compare(
     columns = []            # columnas con datos
     sin_datos = []          # (cid, company) sin plan en los grupos pedidos
     all_coverage_keys = {}  # key -> label
+    inspeccion_by_cid = {}  # cid -> modo de inspección (manual)
 
     for cid in company_ids:
         company = db.query(Company).filter(Company.id == cid).first()
         if not company:
             continue
+        inspeccion_by_cid[cid] = company.inspeccion
 
         branch = db.query(Branch).filter(Branch.company_id == cid, Branch.rama == rama).first()
         seleccion = []
@@ -273,27 +275,36 @@ def compare(
         else:
             sin_datos.append((cid, company))
 
-    # Normalizar coberturas faltantes con "No incluye"
+    if es_veh:
+        # Autos/Motos: filas FIJAS en orden + fila de Inspección (manual)
+        coverage_keys = {k: lbl for k, lbl in COBERTURAS_VEHICULO}
+        coverage_keys["inspeccion"] = "Inspección"
+        for col in columns:
+            insp = inspeccion_by_cid.get(col["company_id"]) or "No especificado"
+            nueva = {k: col["coberturas"].get(k, "No especificado") for k, _ in COBERTURAS_VEHICULO}
+            nueva["inspeccion"] = insp
+            col["coberturas"] = nueva
+        # Compañías sin plan en los grupos pedidos → FALTA MANUAL (pero la inspección sí se conoce)
+        if grupos_sel:
+            for cid, company in sin_datos:
+                cob = {k: FALTA_MANUAL for k, _ in COBERTURAS_VEHICULO}
+                cob["inspeccion"] = (company.inspeccion or "No especificado")
+                columns.append({
+                    "id": f"{cid}-nomanual",
+                    "company_id": cid,
+                    "nombre": company.nombre_oficial or company.nombre,
+                    "logo_url": company.logo_url,
+                    "plan_real": "",
+                    "particularidades": None,
+                    "falta_manual": True,
+                    "coberturas": cob,
+                })
+        return {"coverage_keys": coverage_keys, "columns": columns}
+
+    # Otras ramas: claves dinámicas según lo extraído
     for col in columns:
         for key in all_coverage_keys:
             col["coberturas"].setdefault(key, "No incluye")
-
-    # En vehículos: las compañías sin plan en los grupos pedidos se muestran como FALTA MANUAL
-    if es_veh and grupos_sel:
-        if not all_coverage_keys:
-            all_coverage_keys = dict(COBERTURAS_ESTANDAR)
-        for cid, company in sin_datos:
-            columns.append({
-                "id": f"{cid}-nomanual",
-                "company_id": cid,
-                "nombre": company.nombre_oficial or company.nombre,
-                "logo_url": company.logo_url,
-                "plan_real": "",
-                "particularidades": None,
-                "falta_manual": True,
-                "coberturas": {key: FALTA_MANUAL for key in all_coverage_keys},
-            })
-
     return {
         "coverage_keys": all_coverage_keys,
         "columns": columns,
@@ -326,16 +337,7 @@ def save_extracted_data(data: dict, db: Session, company: Optional[Company] = No
     company.ultima_sync = datetime.utcnow()
     company.activa = True
 
-    LABEL_MAP = {
-        "responsabilidad_civil": "Responsabilidad Civil",
-        "robo_hurto": "Robo y/o Hurto",
-        "incendio": "Incendio",
-        "destruccion_total": "Destrucción Total",
-        "danos_parciales": "Daños Parciales",
-        "granizo": "Granizo",
-        "cristales_cerraduras": "Cristales y Cerraduras",
-        "auxilio_mecanico": "Auxilio Mecánico / Remolque",
-    }
+    LABEL_MAP = dict(COBERTURAS_VEHICULO)
 
     for rama_data in data.get("ramas", []):
         rama_name = rama_data.get("rama", "General")
@@ -361,20 +363,6 @@ def save_extracted_data(data: dict, db: Session, company: Optional[Company] = No
                 cov = Coverage(plan_id=plan.id, campo_clave=key, campo_label=label, valor=str(valor))
                 db.add(cov)
 
-    db.commit()
-
-
-def get_setting_value(db, key: str, default=None):
-    s = db.query(Setting).filter(Setting.key == key).first()
-    return s.value if s and s.value else default
-
-
-def set_setting_value(db, key: str, value: str):
-    s = db.query(Setting).filter(Setting.key == key).first()
-    if s:
-        s.value = value
-    else:
-        db.add(Setting(key=key, value=value))
     db.commit()
 
 
@@ -406,9 +394,7 @@ def run_sync(db_session_factory, force: bool = False, only_company_id: Optional[
         sync_state["started_at"] = datetime.utcnow().isoformat()
         sync_state["finished_at"] = None
 
-        # Prompt de extracción configurable (Opciones)
-        instructions = get_setting_value(db, "extraction_prompt")  # None => default del extractor
-
+        instructions = None  # el prompt es fijo (lista de coberturas en el extractor)
         drive_names_in_drive = None  # solo se usa en sync completo, para desactivar bajas
 
         if only_company_id is not None:
@@ -570,22 +556,18 @@ def trigger_sync_one(company_id: int, _=Depends(verify_token)):
     return {"message": "Sincronización individual iniciada"}
 
 
-# ─── Settings (prompt de extracción editable) ─────────────────────────────────
-
-class SettingsBody(BaseModel):
-    extraction_prompt: str
+class InspeccionBody(BaseModel):
+    inspeccion: Optional[str] = None
 
 
-@app.get("/settings")
-def get_settings(db: Session = Depends(get_db), _=Depends(verify_token)):
-    val = get_setting_value(db, "extraction_prompt") or DEFAULT_INSTRUCTIONS
-    return {"extraction_prompt": val, "default_prompt": DEFAULT_INSTRUCTIONS}
-
-
-@app.put("/settings")
-def update_settings(body: SettingsBody, db: Session = Depends(get_db), _=Depends(verify_token)):
-    set_setting_value(db, "extraction_prompt", body.extraction_prompt.strip())
-    return {"ok": True}
+@app.patch("/companies/{company_id}/inspeccion")
+def set_inspeccion(company_id: int, body: InspeccionBody, db: Session = Depends(get_db), _=Depends(verify_token)):
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404)
+    company.inspeccion = body.inspeccion or None
+    db.commit()
+    return {"ok": True, "inspeccion": company.inspeccion}
 
 
 @app.get("/sync/status")

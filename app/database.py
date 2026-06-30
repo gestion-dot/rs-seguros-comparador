@@ -32,6 +32,7 @@ class Company(Base):
     url_manual = Column(String, nullable=True)
     logo_url = Column(String, nullable=True)
     fecha_manual = Column(String, nullable=True)
+    inspeccion = Column(String, nullable=True)  # modo de inspección elegido a mano por el usuario
     activa = Column(Boolean, default=True)
     ultima_sync = Column(DateTime, nullable=True)
     branches = relationship("Branch", back_populates="company", cascade="all, delete-orphan")
@@ -99,6 +100,7 @@ def init_db():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS grupo VARCHAR"))
             conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS nombre_oficial VARCHAR"))
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS inspeccion VARCHAR"))
             conn.commit()
     except Exception:
         pass  # SQLite u otra DB: la columna ya viene de create_all
