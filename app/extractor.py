@@ -37,6 +37,14 @@ class RateLimitError(Exception):
         self.retry_after = retry_after
 
 
+class RequestTooLargeError(Exception):
+    """La request excede el límite de tokens por minuto del tier (413). Reducir input."""
+    def __init__(self, msg, requested=None, limit=None):
+        super().__init__(msg)
+        self.requested = requested
+        self.limit = limit
+
+
 def _is_rate_limit_text(s: str) -> bool:
     s = s.lower()
     return "429" in s or "rate limit" in s or "rate_limit" in s or "quota" in s or "exhausted" in s
@@ -99,6 +107,14 @@ def _call_groq(system: str, user: str) -> str:
     if r.status_code == 400 and "json_validate_failed" in r.text:
         body2 = {k: v for k, v in body.items() if k != "response_format"}
         r = _post(body2)
+    if r.status_code == 413 and "per minute" in r.text.lower():
+        req = re.search(r"Requested (\d+)", r.text)
+        lim = re.search(r"Limit (\d+)", r.text)
+        raise RequestTooLargeError(
+            r.text[:300],
+            requested=int(req.group(1)) if req else None,
+            limit=int(lim.group(1)) if lim else None,
+        )
     if r.status_code == 429:
         if _is_daily_quota_text(r.text):
             raise QuotaExhaustedError(r.text[:400])
@@ -275,19 +291,32 @@ def clean_json_response(raw: str) -> str:
 
 
 def extract_coverages_from_text(text: str, company_name: str, instructions: str | None = None) -> dict:
-    truncated = text[:MAX_INPUT_CHARS] if len(text) > MAX_INPUT_CHARS else text
     # Quitar caracteres de control no imprimibles (PDFs corruptos descarrilan al modelo)
-    truncated = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", truncated)
-
+    clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", text)
     system_prompt = build_system_prompt(instructions)
-    user_prompt = (
-        f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}\n\n"
-        "IMPORTANTE: Respondé ÚNICAMENTE con el objeto JSON especificado, "
-        "empezando con { y terminando con }. Nada de texto, tablas ni explicaciones fuera del JSON."
-    )
 
-    raw = _generate_with_retry(system_prompt, user_prompt)
-    return json.loads(clean_json_response(raw))
+    chars = MAX_INPUT_CHARS
+    last_err = None
+    for _ in range(4):
+        truncated = clean[:chars]
+        user_prompt = (
+            f"Compañía: {company_name}\n\nContenido del manual:\n\n{truncated}\n\n"
+            "IMPORTANTE: Respondé ÚNICAMENTE con el objeto JSON especificado, "
+            "empezando con { y terminando con }. Nada de texto, tablas ni explicaciones fuera del JSON."
+        )
+        try:
+            raw = _generate_with_retry(system_prompt, user_prompt)
+            return json.loads(clean_json_response(raw))
+        except RequestTooLargeError as e:
+            last_err = e
+            # Reducir el input según el exceso reportado por la API (con margen)
+            if e.requested and e.limit:
+                chars = int(chars * (e.limit / e.requested) * 0.85)
+            else:
+                chars = int(chars * 0.6)
+            if chars < 3000:
+                raise
+    raise last_err  # pragma: no cover
 
 
 def extract_from_pdf(pdf_path: Path, company_name: str, instructions: str | None = None) -> dict:
