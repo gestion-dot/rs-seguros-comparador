@@ -379,14 +379,15 @@
                   </div>
                 </td>
                 <template x-for="col in visibleColumns" :key="col.id">
-                  <td class="px-3 py-2 text-center" :class="key==='inspeccion' ? 'bg-blue-50 text-blue-800 font-medium' : cellClass(col.coberturas[key])">
-                    <template x-if="key==='inspeccion'">
-                      <span class="text-xs" x-text="col.coberturas[key]&&col.coberturas[key]!=='No especificado' ? col.coberturas[key] : '—'"></span>
+                  <td class="px-3 py-2 text-center"
+                    :class="key==='inspeccion' ? 'bg-blue-50 text-blue-800 font-medium' : (key==='antiguedad_maxima' ? 'bg-slate-50 text-slate-700 font-medium' : cellClass(col.coberturas[key]))">
+                    <template x-if="key==='inspeccion' || key==='antiguedad_maxima'">
+                      <span class="text-xs" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto') ? col.coberturas[key] : '—'"></span>
                     </template>
-                    <template x-if="key!=='inspeccion'">
+                    <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
                       <div>
                         <div class="font-bold text-sm" x-text="cellIcon(col.coberturas[key])"></div>
-                        <div class="text-xs mt-0.5 leading-tight opacity-80" x-text="cellText(col.coberturas[key])"></div>
+                        <div class="text-xs mt-0.5 leading-tight opacity-80" x-text="key==='responsabilidad_civil' ? '' : cellText(col.coberturas[key])"></div>
                       </div>
                     </template>
                   </td>
@@ -681,11 +682,18 @@ function app(){return{
       const label=lbls[k]||k;
       const cells=cos.map(c=>{
         const v=c.coberturas[k]||'No incluye';
-        let bg,col,icon,txt;
-        if(v==='FALTA MANUAL PRODUCTO'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual producto</div>`;}
-        else if(v==='No incluye'){bg='#fee2e2';col='#991b1b';icon='✗';txt='';}
-        else if(v==='No especificado'){bg='#f3f4f6';col='#6b7280';icon='—';txt='';}
-        else{bg='#dcfce7';col='#166534';icon='✓';txt=`<div style="font-size:10px;color:#374151;margin-top:2px;">${v.length>65?v.substring(0,65)+'…':v}</div>`;}
+        // Campos de dato (texto, sin tilde): antigüedad e inspección
+        if(k==='antiguedad_maxima'||k==='inspeccion'){
+          const dato=(v&&v!=='No especificado'&&v!=='No cubierto')?v:'—';
+          const bg=k==='inspeccion'?'#eff6ff':'#f8fafc', colr=k==='inspeccion'?'#1e40af':'#334155';
+          return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;font-size:10px;font-weight:600;color:${colr};">${dato}</td>`;
+        }
+        const kind=this.cellKind(v);
+        let bg,col,icon,txt='';
+        if(kind==='fm'){bg='#fef9c3';col='#854d0e';icon='⚠';txt=`<div style="font-size:9px;font-weight:600;color:#854d0e;margin-top:2px;">Falta manual producto</div>`;}
+        else if(kind==='no'){bg='#fee2e2';col='#991b1b';icon='✗';}
+        else if(kind==='unknown'){bg='#f3f4f6';col='#6b7280';icon='—';}
+        else{bg='#dcfce7';col='#166534';icon='✓'; if(k!=='responsabilidad_civil'){const t=this.cellText(v); if(t) txt=`<div style="font-size:10px;color:#374151;margin-top:2px;">${t.length>65?t.substring(0,65)+'…':t}</div>`;}}
         return`<td style="padding:8px 10px;text-align:center;background:${bg};border:1px solid #e2e8f0;"><div style="font-weight:700;font-size:15px;color:${col};">${icon}</div>${txt}</td>`;
       }).join('');
       return`<tr><td style="padding:8px 12px;font-size:11px;font-weight:600;color:#374151;border:1px solid #e2e8f0;background:#f8fafc;">${label}</td>${cells}</tr>`;
