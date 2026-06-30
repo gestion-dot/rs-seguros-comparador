@@ -350,16 +350,16 @@
             <tr>
               <th class="px-3 py-2 text-left text-xs font-bold text-gray-500 bg-gray-50 uppercase tracking-wide w-40 sticky left-0 z-10">Cobertura</th>
               <template x-for="col in visibleColumns" :key="col.id">
-                <th class="px-1.5 py-1.5 text-center bg-slate-800 min-w-[92px] max-w-[120px] relative align-top">
+                <th class="px-2 py-2 text-center bg-slate-800 min-w-[168px] relative align-middle">
                   <button @click="hideColumn(col.id)" title="Ocultar columna"
-                    class="absolute top-0.5 right-0.5 text-slate-400 hover:text-red-400 text-[11px] leading-none w-4 h-4">✕</button>
-                  <div class="flex flex-col items-center gap-0.5">
+                    class="absolute top-1 right-1 text-slate-400 hover:text-red-400 text-xs leading-none w-4 h-4">✕</button>
+                  <div class="flex flex-col items-center gap-1">
                     <template x-if="col.logo_url">
-                      <img :src="col.logo_url" class="h-6 w-auto object-contain max-w-[88px] bg-white rounded px-1" :alt="col.nombre"
+                      <img :src="col.logo_url" class="h-9 w-auto object-contain max-w-[130px] bg-white rounded px-1.5 py-0.5" :alt="col.nombre"
                            onerror="this.style.display='none'">
                     </template>
-                    <span class="text-[11px] font-bold text-white leading-tight" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
-                    <span class="text-[10px] font-normal text-slate-300 leading-tight" x-show="col.plan_real" x-text="col.plan_real"></span>
+                    <span class="text-xs font-bold text-white leading-tight" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
+                    <span class="text-[11px] font-normal text-slate-300 leading-tight" x-show="col.plan_real" x-text="col.plan_real"></span>
                   </div>
                 </th>
               </template>
@@ -368,22 +368,22 @@
           <tbody>
             <template x-for="key in selectedCoverageKeys" :key="key">
               <tr class="hover:bg-blue-50/40 transition group">
-                <td class="px-3 py-1.5 font-semibold text-gray-700 bg-white sticky left-0 z-10 border-r border-gray-200">
+                <td class="px-3 py-1 font-semibold text-gray-700 bg-white sticky left-0 z-10 border-r border-gray-200">
                   <div class="flex items-center gap-1.5">
                     <input type="checkbox" :checked="true" @change="toggleCoverage(key)" class="rounded text-blue-600 shrink-0">
                     <span class="text-[11px] leading-tight" x-text="coverageLabels[key]||key"></span>
                   </div>
                 </td>
                 <template x-for="col in visibleColumns" :key="col.id">
-                  <td class="px-1.5 py-1.5 text-center"
+                  <td class="px-2 py-1 text-center"
                     :class="key==='inspeccion' ? 'bg-blue-50 text-blue-800 font-medium' : (key==='antiguedad_maxima' ? 'bg-slate-50 text-slate-700 font-medium' : cellClass(col.coberturas[key]))">
                     <template x-if="key==='inspeccion' || key==='antiguedad_maxima'">
-                      <span class="text-[11px]" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto') ? col.coberturas[key] : '—'"></span>
+                      <span class="text-[11px] leading-tight" x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto') ? col.coberturas[key] : '—'"></span>
                     </template>
                     <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
                       <div>
                         <div class="font-bold text-[13px] leading-none" x-text="cellIcon(col.coberturas[key])"></div>
-                        <div class="text-[10px] mt-0.5 leading-tight opacity-80" x-text="key==='responsabilidad_civil' ? '' : cellText(col.coberturas[key])"></div>
+                        <div class="text-[11px] mt-0.5 leading-tight opacity-80" x-text="key==='responsabilidad_civil' ? '' : cellText(col.coberturas[key])"></div>
                       </div>
                     </template>
                   </td>
