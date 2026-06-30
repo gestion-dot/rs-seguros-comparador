@@ -167,6 +167,7 @@ def _generate_with_retry(system_prompt: str, user_prompt: str) -> str:
 # La IA SOLO verifica estas contra el manual; no inventa ni omite.
 # "inspeccion" NO está acá: la define el usuario a mano (no sale del manual).
 COBERTURAS_VEHICULO = [
+    ("antiguedad_maxima", "Antigüedad Máxima"),
     ("responsabilidad_civil", "Responsabilidad Civil"),
     ("robo_total", "Robo Total"),
     ("robo_parcial", "Robo Parcial"),
@@ -175,7 +176,6 @@ COBERTURAS_VEHICULO = [
     ("dano_parcial", "Daño Parcial"),
     ("dano_parcial_robo_total_sin_franquicia", "Daño Parcial a consecuencia de Robo Total - Sin franquicia"),
     ("dano_parcial_con_franquicia", "Daño Parcial con Franquicia"),
-    ("antiguedad_maxima", "Antigüedad Máxima"),
     ("cerraduras", "Cerraduras"),
     ("luneta_parabrisas", "Luneta y Parabrisas"),
     ("cristales_laterales", "Cristales Laterales"),

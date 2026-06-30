@@ -56,13 +56,6 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
       </svg>
     </button>
-    <button @click="triggerSync(true)" :disabled="syncing" title="Busca manuales nuevos o modificados y actualiza coberturas con IA"
-      class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50">
-      <svg :class="syncing?'animate-spin':''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-      </svg>
-      <span x-text="syncing?'Sincronizando...':'Sincronizar'"></span>
-    </button>
     <button @click="logout()" class="text-sm text-gray-400 hover:text-red-500 transition">Salir</button>
   </div>
 </nav>
@@ -386,14 +379,9 @@
                   </div>
                 </td>
                 <template x-for="col in visibleColumns" :key="col.id">
-                  <td class="px-3 py-2 text-center" :class="key==='inspeccion' ? 'bg-blue-50' : cellClass(col.coberturas[key])">
+                  <td class="px-3 py-2 text-center" :class="key==='inspeccion' ? 'bg-blue-50 text-blue-800 font-medium' : cellClass(col.coberturas[key])">
                     <template x-if="key==='inspeccion'">
-                      <select @change="setInspeccion(col.company_id,$event.target.value)"
-                        class="text-xs border border-blue-300 rounded px-1.5 py-1 bg-white text-blue-800">
-                        <option value="" :selected="!col.coberturas[key]||col.coberturas[key]==='No especificado'">—</option>
-                        <option value="Link digital" :selected="col.coberturas[key]==='Link digital'">Link digital</option>
-                        <option value="Fotos fechadas" :selected="col.coberturas[key]==='Fotos fechadas'">Fotos fechadas</option>
-                      </select>
+                      <span class="text-xs" x-text="col.coberturas[key]&&col.coberturas[key]!=='No especificado' ? col.coberturas[key] : '—'"></span>
                     </template>
                     <template x-if="key!=='inspeccion'">
                       <div>
@@ -588,9 +576,14 @@ function app(){return{
     const k=this.cellKind(v);
     if(k==='fm') return 'Falta manual producto';
     if(k==='unknown') return '';
-    const s=String(v||'');
+    let s=String(v||'');
     const low=s.toLowerCase();
     if(k==='no' && (low==='no'||low==='no cubierto'||low==='no cubre'||low==='no incluye')) return '';
+    if(k==='yes'){
+      // El tilde verde ya indica "incluido": quitamos el "Sí" redundante y dejamos solo el detalle
+      s=s.replace(/^s[íi]\s*[,\-:.]?\s*/i,'').replace(/^al\s*100%$/i,'').trim();
+      if(s.toLowerCase()==='100%') s='';
+    }
     return s.length>70?s.substring(0,70)+'…':s;
   },
 
