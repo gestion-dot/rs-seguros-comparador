@@ -22,7 +22,7 @@
   .cell-faltamanual{background:#fef9c3;color:#854d0e;font-weight:600}
   #compare-table th,#compare-table td{border:1px solid #e2e8f0}
   /* Scroll horizontal siempre visible en la tabla comparativa */
-  .tabla-scroll{overflow:auto;max-height:calc(100vh - 162px);}
+  .tabla-scroll{overflow:auto;max-height:calc(100vh - 108px);}
   .tabla-scroll{scrollbar-width:auto;scrollbar-color:#94a3b8 #e2e8f0;}
   .tabla-scroll::-webkit-scrollbar{height:14px;width:14px;}
   .tabla-scroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:7px;}
@@ -55,6 +55,13 @@
     <span class="text-sm text-gray-500 hidden sm:block">Comparador de Coberturas</span>
   </div>
   <div class="flex items-center gap-3">
+    <button x-show="compareResult" @click="generateImage()"
+      class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-md">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      Generar imagen
+    </button>
     <button @click="openOptions()" title="Opciones (prompt de análisis y sincronización por compañía)"
       class="text-gray-400 hover:text-gray-700 transition p-1.5 rounded-lg hover:bg-gray-100">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,20 +311,6 @@
 
     <!-- Results -->
     <div x-show="compareResult">
-      <!-- Toolbar -->
-      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div>
-          <h2 class="text-lg font-bold text-gray-800" x-text="currentTitle"></h2>
-          <p class="text-xs text-gray-400 mt-0.5" x-text="selectedCoverageKeys.length+' coberturas · '+visibleColumns.length+' columnas'"></p>
-        </div>
-        <button @click="generateImage()"
-          class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition shadow-md">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-          </svg>
-          Generar imagen
-        </button>
-      </div>
 
       <!-- Aviso: compañías sin datos para esta rama/grupo -->
       <div x-show="companiesWithoutData.length>0" class="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-orange-700">
@@ -681,14 +674,29 @@ function app(){return{
   showToast(msg,ms=3500){this.toast=msg;setTimeout(()=>this.toast='',ms);},
   logout(){localStorage.removeItem('rs_token');window.location.href='/';},
 
+  async dataUrl(url){
+    try{
+      const blob=await fetch(url).then(r=>r.ok?r.blob():null);
+      if(!blob) return null;
+      return await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});
+    }catch(e){ return null; }
+  },
+
   async generateImage(){
     const cos=this.visibleColumns;
     const keys=this.selectedCoverageKeys;
     const lbls=this.coverageLabels;
     const today=new Date().toLocaleDateString('es-AR');
+    if(!cos.length || !keys.length){ this.showToast('No hay columnas o coberturas para generar la imagen'); return; }
+    this.showToast('Generando imagen…', 8000);
+
+    // Precargar TODOS los logos como data-URL (evita que html2canvas falle por imágenes sin cargar)
+    const logoData={};
+    await Promise.all(cos.filter(c=>c.logo_url).map(async c=>{ logoData[c.id]=await this.dataUrl(c.logo_url); }));
 
     const colHeaders=cos.map(c=>{
-      const logo=c.logo_url?`<img src="${c.logo_url}" style="height:42px;max-width:150px;object-fit:contain;background:#fff;border-radius:4px;padding:4px 6px;" onerror="this.style.display='none'">`:`<div style="font-size:12px;font-weight:700;color:#fff;">${c.nombre}</div>`;
+      const src=logoData[c.id]||c.logo_url;
+      const logo=src?`<img src="${src}" style="height:42px;max-width:150px;object-fit:contain;background:#fff;border-radius:4px;padding:4px 6px;">`:`<div style="font-size:12px;font-weight:700;color:#fff;">${c.nombre}</div>`;
       const plan=c.plan_real||'—';
       return`<th style="padding:0;border:1px solid #2d4f7a;min-width:150px;vertical-align:top;">
         <div style="background:#1e3a5f;padding:10px 12px;display:flex;align-items:center;justify-content:center;min-height:56px;">${logo}</div>
@@ -719,10 +727,8 @@ function app(){return{
     }).join('');
 
     let rsLogo=`<div style="color:white;font-weight:900;font-size:16px;">RS SEGUROS</div>`;
-    try{
-      const blob=await fetch('/assets/logos/rs.png').then(r=>r.ok?r.blob():null);
-      if(blob){const b64=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(blob);});rsLogo=`<img src="${b64}" style="height:56px;width:56px;object-fit:contain;">`;}
-    }catch(e){}
+    const rsB64=await this.dataUrl('/assets/logos/rs.png');
+    if(rsB64) rsLogo=`<img src="${rsB64}" style="height:56px;width:56px;object-fit:contain;">`;
 
     const html=`<div style="font-family:Arial,sans-serif;background:white;width:max-content;min-width:500px;">
       <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;">
@@ -746,18 +752,29 @@ function app(){return{
 
     const tpl=document.getElementById('img-tpl');
     tpl.innerHTML=html;
+    const node=tpl.firstElementChild;
+    // Dejar que el navegador calcule el layout completo del template oculto
+    await new Promise(r=>setTimeout(r,60));
+    const w=node.scrollWidth||(cos.length*155+200);
+    const h=node.scrollHeight||((keys.length+2)*34+90);
+    // Mantener el canvas por debajo del límite del navegador (~16384px por lado)
+    let scale=2;
+    const maxSide=16000;
+    if(w*scale>maxSide || h*scale>maxSide) scale=Math.max(0.5, Math.min(maxSide/w, maxSide/h));
     try{
-      const canvas=await html2canvas(tpl.firstElementChild,{scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff'});
-      canvas.toBlob(async blob=>{
-        try{
-          await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-          this.showToast('✓ ¡Imagen copiada! Pegá con Ctrl+V');
-        }catch(e){
-          const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-          a.download='Comparativa cobertura RS.png';a.click();
-          this.showToast('Imagen descargada como "Comparativa cobertura RS.png"');
-        }
-      },'image/png');
+      const canvas=await html2canvas(node,{scale, useCORS:true, backgroundColor:'#fff', width:w, height:h, windowWidth:w, windowHeight:h, scrollX:0, scrollY:0});
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+      if(!blob) throw new Error('canvas vacío');
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        this.showToast('✓ ¡Imagen copiada ('+cos.length+' columnas × '+keys.length+' coberturas)! Pegá con Ctrl+V');
+      }catch(e){
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+        a.download='Comparativa cobertura RS.png';a.click();
+        this.showToast('Imagen descargada como "Comparativa cobertura RS.png"');
+      }
+    }catch(e){
+      this.showToast('No se pudo generar la imagen: '+(e.message||e)+'. Probá ocultando algunas columnas.', 6000);
     }finally{tpl.innerHTML='';}
   }
 }}
