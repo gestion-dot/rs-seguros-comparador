@@ -130,33 +130,23 @@
     <div class="overflow-y-auto px-6 py-5 space-y-6">
 
       <section>
-        <h4 class="font-semibold text-gray-700 text-sm mb-1">Compañías</h4>
-        <p class="text-xs text-gray-400 mb-3">Re-analizá el manual de una compañía (verifica las coberturas fijas de Autos/Motos contra el manual) y elegí su modo de inspección.</p>
+        <h4 class="font-semibold text-gray-700 text-sm mb-1">Modo de inspección por compañía</h4>
+        <p class="text-xs text-gray-400 mb-3">Elegí cómo inspecciona cada compañía (Link digital / Fotos fechadas). Aparece como fila en la comparativa.</p>
         <div class="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
           <template x-for="c in companies" :key="c.id">
             <div class="flex items-center justify-between gap-3 px-3 py-2.5">
               <div class="flex items-center gap-2 min-w-0">
                 <template x-if="c.logo_url">
-                  <img :src="c.logo_url" class="h-6 w-6 object-contain bg-white rounded" onerror="this.style.display='none'">
+                  <img :src="c.logo_url" class="h-6 w-auto max-w-16 object-contain bg-white rounded" onerror="this.style.display='none'">
                 </template>
-                <div class="min-w-0">
-                  <div class="text-sm text-gray-700 truncate" x-text="c.nombre"></div>
-                  <div class="text-[10px] text-gray-400" x-text="c.ultima_sync ? 'Últ.: '+new Date(c.ultima_sync).toLocaleString('es-AR') : 'Sin sincronizar'"></div>
-                </div>
+                <div class="text-sm text-gray-700 truncate" x-text="c.nombre"></div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <select @change="setInspeccion(c.id, $event.target.value)"
-                  class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white" title="Modo de inspección">
-                  <option value="" :selected="!c.inspeccion">Inspección…</option>
-                  <option value="Link digital" :selected="c.inspeccion==='Link digital'">Link digital</option>
-                  <option value="Fotos fechadas" :selected="c.inspeccion==='Fotos fechadas'">Fotos fechadas</option>
-                </select>
-                <button @click="syncOne(c.id)" :disabled="syncing"
-                  class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition disabled:opacity-50">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  Sincronizar
-                </button>
-              </div>
+              <select @change="setInspeccion(c.id, $event.target.value)"
+                class="shrink-0 text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white" title="Modo de inspección">
+                <option value="" :selected="!c.inspeccion">Inspección…</option>
+                <option value="Link digital" :selected="c.inspeccion==='Link digital'">Link digital</option>
+                <option value="Fotos fechadas" :selected="c.inspeccion==='Fotos fechadas'">Fotos fechadas</option>
+              </select>
             </div>
           </template>
         </div>
@@ -554,9 +544,8 @@ function app(){return{
   },
   hideColumn(id){ if(!this.hiddenColumns.includes(id)) this.hiddenColumns.push(id); },
   showColumn(id){ const i=this.hiddenColumns.indexOf(id); if(i>=0) this.hiddenColumns.splice(i,1); },
-  // Logos que YA incluyen el nombre de la compañía (no hace falta repetir el nombre).
-  // El resto son isotipos/símbolos → se muestra el nombre además del logo.
-  logoConNombre(url){ return !!url && /experta/i.test(url); },
+  // Los logos cargados ya incluyen el nombre de la compañía → no repetir el nombre debajo.
+  logoConNombre(url){ return !!url; },
 
   toggleCoverage(key){
     const i=this.selectedCoverageKeys.indexOf(key);

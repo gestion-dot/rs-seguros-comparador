@@ -119,9 +119,10 @@ def update_logo(company_id: int, body: dict, db: Session = Depends(get_db), _=De
 
 @app.get("/ramas")
 def get_ramas(db: Session = Depends(get_db), _=Depends(verify_token)):
-    """Get all distinct branches across all companies."""
+    """Ramas disponibles. Por ahora solo Autos y Motos (otros riesgos quedan fuera)."""
     branches = db.query(Branch.rama).distinct().all()
-    return sorted({b.rama for b in branches})
+    ramas = {b.rama for b in branches if _rama_es_vehiculo(b.rama)}
+    return sorted(ramas)
 
 
 def _rama_es_vehiculo(rama: str) -> bool:
