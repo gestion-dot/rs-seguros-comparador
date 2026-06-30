@@ -186,12 +186,9 @@ COBERTURAS_VEHICULO = [
     ("robo_ruedas", "Robo de Ruedas / Reposición"),
     ("reposicion_llave", "Reposición de Llave (robo)"),
     ("asistencia_mecanica_remolque", "Asistencia Mecánica y Remolque (eventos/año y km)"),
-    ("asistencia_viajero_legal", "Asistencia al Viajero / Legal"),
     ("accidentes_personales", "Accidentes Personales (Conductor/Acompañantes)"),
     ("auto_sustituto", "Vehículo / Auto Sustituto"),
     ("rc_paises_limitrofes", "RC Países Limítrofes / Mercosur"),
-    ("gestoria", "Honorarios de Gestoría"),
-    ("bonificacion_saldo_poliza", "Bonificación de saldo de póliza (pérdida total)"),
 ]
 
 _LISTA_COB = "\n".join(f'- "{k}": {lbl}' for k, lbl in COBERTURAS_VEHICULO)
