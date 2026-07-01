@@ -54,6 +54,7 @@ class Plan(Base):
     nombre_plan = Column(String)
     variante = Column(String, nullable=True)
     grupo = Column(String, nullable=True)  # grupo canónico (RC, Garage, Todo Riesgo, etc.)
+    alias = Column(String, nullable=True)  # nombre simplificado del multicotizador (nombre de fantasía)
     particularidades = Column(Text, nullable=True)
     branch = relationship("Branch", back_populates="plans")
     coverages = relationship("Coverage", back_populates="plan", cascade="all, delete-orphan")
@@ -99,6 +100,7 @@ def init_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS grupo VARCHAR"))
+            conn.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS alias VARCHAR"))
             conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS nombre_oficial VARCHAR"))
             conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS inspeccion VARCHAR"))
             conn.commit()

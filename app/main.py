@@ -262,7 +262,9 @@ def compare(
                 for cov in p.coverages:
                     coberturas[cov.campo_clave] = cov.valor
                     all_coverage_keys[cov.campo_clave] = cov.campo_label
-                etiqueta_plan = p.nombre_plan + (f" ({p.variante})" if p.variante else "")
+                base_plan = p.nombre_plan + (f" ({p.variante})" if p.variante else "")
+                # Anteponer el nombre del multicotizador (alias) si existe: "Fantasía - Original"
+                etiqueta_plan = f"{p.alias} - {base_plan}" if getattr(p, "alias", None) else base_plan
                 columns.append({
                     "id": f"{cid}-{p.id}",
                     "company_id": cid,
