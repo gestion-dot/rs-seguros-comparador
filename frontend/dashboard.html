@@ -21,7 +21,9 @@
   .cell-no{background:#fee2e2;color:#991b1b}
   .cell-unknown{background:#f3f4f6;color:#6b7280}
   .cell-faltamanual{background:#fef9c3;color:#854d0e;font-weight:600}
-  #compare-table th,#compare-table td{border:1px solid #e2e8f0}
+  /* border-separate (no collapse) para que position:sticky funcione en las celdas */
+  #compare-table{border-collapse:separate;border-spacing:0;}
+  #compare-table th,#compare-table td{border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;}
   /* Scroll horizontal siempre visible en la tabla comparativa */
   .tabla-scroll{overflow:auto;max-height:calc(100vh - 108px);}
   .tabla-scroll{scrollbar-width:auto;scrollbar-color:#94a3b8 #e2e8f0;}
@@ -29,7 +31,11 @@
   .tabla-scroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:7px;}
   .tabla-scroll::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:7px;border:3px solid #e2e8f0;}
   .tabla-scroll::-webkit-scrollbar-thumb:hover{background:#64748b;}
+  /* Encabezado superior fijo (scroll vertical) */
   #compare-table thead th{position:sticky;top:0;z-index:20;}
+  /* Primera columna "Cobertura" fija (scroll horizontal) */
+  #compare-table thead th:first-child{left:0;z-index:30;}
+  #compare-table tbody td:first-child{position:sticky;left:0;z-index:15;}
   .ts-wrapper{width:100%}
   .ts-control{border:1px solid #d1d5db!important;border-radius:8px!important;padding:6px 10px!important;font-size:13px!important;min-height:38px!important}
   .ts-dropdown{font-size:13px!important;border-radius:8px!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}
@@ -43,12 +49,6 @@
 <!-- NAVBAR -->
 <nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
   <div class="flex items-center gap-3">
-    <button @click="sidebarOpen=!sidebarOpen" :title="sidebarOpen?'Ocultar panel de filtros':'Mostrar panel de filtros'"
-      class="flex items-center gap-1 text-gray-500 hover:text-blue-700 transition px-2 py-1.5 rounded-lg hover:bg-gray-100">
-      <svg class="w-5 h-5 transition-transform" :class="!sidebarOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7M18 19l-7-7 7-7"/>
-      </svg>
-    </button>
     <img src="/assets/logos/rs.png"
          onerror="this.style.display='none'" class="h-9" alt="RS">
     <span class="font-bold text-gray-700 text-base hidden sm:block">RS Seguros &amp; Finanzas</span>
@@ -176,10 +176,24 @@
 <!-- MAIN LAYOUT -->
 <div class="flex h-[calc(100vh-57px)]">
 
+  <!-- Botón flotante para reabrir el panel cuando está oculto -->
+  <button x-show="!sidebarOpen" @click="sidebarOpen=true" title="Mostrar filtros"
+    class="fixed left-0 top-24 z-40 bg-red-500 hover:bg-red-600 text-white rounded-r-lg py-3 pl-1.5 pr-2 shadow-lg transition">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M6 5l7 7-7 7"/>
+    </svg>
+  </button>
+
   <!-- SIDEBAR FILTERS -->
   <aside x-show="sidebarOpen" x-transition.opacity class="w-72 min-w-72 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
-    <div class="p-4 border-b border-gray-100 bg-gray-50">
+    <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
       <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filtros</h2>
+      <button @click="sidebarOpen=false" title="Ocultar panel de filtros"
+        class="flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white rounded-lg px-2 py-1 shadow-sm transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7M18 19l-7-7 7-7"/>
+        </svg>
+      </button>
     </div>
 
     <div class="p-3 space-y-2 flex-1">
@@ -365,7 +379,7 @@
 
       <!-- Comparison table -->
       <div x-show="visibleColumns.length>0" class="tabla-scroll rounded-xl border border-gray-200 shadow-sm">
-        <table id="compare-table" class="min-w-full text-xs border-collapse">
+        <table id="compare-table" class="min-w-full text-xs">
           <thead>
             <tr>
               <th class="px-3 py-2 text-left text-xs font-bold text-gray-500 bg-gray-50 uppercase tracking-wide w-40 sticky left-0 z-10 align-middle">Cobertura</th>
