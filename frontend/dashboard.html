@@ -9,6 +9,7 @@
 <link rel="manifest" href="/assets/manifest.json">
 <meta name="theme-color" content="#0f172a">
 <script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
@@ -181,102 +182,138 @@
       <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filtros</h2>
     </div>
 
-    <div class="p-4 space-y-5 flex-1">
+    <div class="p-3 space-y-2 flex-1">
 
-      <!-- 1 · COMPAÑÍAS -->
-      <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-          1 · Compañías
-          <span class="text-blue-600 font-normal" x-text="selectedCompanies.length > 0 ? '('+selectedCompanies.length+' sel.)' : ''"></span>
-        </label>
-        <input x-model="companySearch" type="text" placeholder="Buscar compañía..."
-          class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-        <!-- Todas -->
-        <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-blue-50 hover:bg-blue-100 mb-1">
-          <input type="checkbox" :checked="allCompaniesSelected" @change="toggleAllCompanies()" class="rounded text-blue-600">
-          <span class="text-xs font-bold text-blue-700">Todas las compañías</span>
-        </label>
-        <div class="space-y-0.5 max-h-56 overflow-y-auto border border-gray-100 rounded-lg p-1">
-          <template x-for="c in filteredCompanies" :key="c.id">
-            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-              <input type="checkbox" :checked="selectedCompanies.includes(c.id)"
-                @change="toggleCompany(c.id)" class="rounded text-blue-600">
-              <span class="text-xs text-gray-700" x-text="c.nombre"></span>
-            </label>
-          </template>
-          <p x-show="filteredCompanies.length===0" class="text-xs text-gray-400 p-2">Sin resultados</p>
+      <!-- PASO 1 · COMPAÑÍAS -->
+      <div class="border border-gray-200 rounded-xl overflow-hidden">
+        <button @click="setStep(1)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition text-left">
+          <span class="flex items-center gap-2 min-w-0">
+            <svg x-show="selectedCompanies.length>0" class="w-4 h-4 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.1 3.1 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+            <span class="text-xs font-bold uppercase tracking-wider text-gray-600 truncate">1 · Compañías</span>
+          </span>
+          <span class="flex items-center gap-2 shrink-0">
+            <span class="text-[11px] text-blue-600 font-semibold" x-show="openStep!==1" x-text="summaryCompanies"></span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="openStep===1 && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </span>
+        </button>
+        <div x-show="openStep===1" x-collapse class="p-3 border-t border-gray-100">
+          <input x-model="companySearch" type="text" placeholder="Buscar compañía..."
+            class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-blue-50 hover:bg-blue-100 mb-1">
+            <input type="checkbox" :checked="allCompaniesSelected" @change="toggleAllCompanies()" class="rounded text-blue-600">
+            <span class="text-xs font-bold text-blue-700">Todas las compañías</span>
+          </label>
+          <div class="space-y-0.5 max-h-60 overflow-y-auto border border-gray-100 rounded-lg p-1">
+            <template x-for="c in filteredCompanies" :key="c.id">
+              <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                <input type="checkbox" :checked="selectedCompanies.includes(c.id)"
+                  @change="toggleCompany(c.id)" class="rounded text-blue-600">
+                <span class="text-xs text-gray-700" x-text="c.nombre"></span>
+              </label>
+            </template>
+            <p x-show="filteredCompanies.length===0" class="text-xs text-gray-400 p-2">Sin resultados</p>
+          </div>
+          <button x-show="selectedCompanies.length>0" @click="setStep(2)" class="w-full mt-2 text-xs text-blue-600 hover:underline text-right">Siguiente: tipo de cobertura →</button>
         </div>
       </div>
 
-      <!-- 2 · GRUPO DE COBERTURA (Autos) - multi-selección -->
-      <div x-show="selectedCompanies.length>0 && esVehiculo">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-          2 · Tipo de cobertura
-          <span class="text-emerald-600 font-normal" x-text="selectedGrupos.length>0 ? '('+selectedGrupos.length+' sel.)' : ''"></span>
-        </label>
-        <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-emerald-50 hover:bg-emerald-100 mb-1">
-          <input type="checkbox" :checked="allGruposSelected" @change="toggleAllGrupos()" class="rounded text-emerald-600">
-          <span class="text-xs font-bold text-emerald-700">Todos los tipos</span>
-        </label>
-        <div class="space-y-0.5 border border-gray-100 rounded-lg p-1">
-          <template x-for="g in grupos" :key="g">
-            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-              <input type="checkbox" :checked="selectedGrupos.includes(g)" @change="toggleGrupo(g)" class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700" x-text="g"></span>
-            </label>
-          </template>
+      <!-- PASO 2 · TIPO DE COBERTURA -->
+      <div class="border border-gray-200 rounded-xl overflow-hidden">
+        <button @click="setStep(2)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition text-left">
+          <span class="flex items-center gap-2 min-w-0">
+            <svg x-show="selectedGrupos.length>0" class="w-4 h-4 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.1 3.1 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+            <span class="text-xs font-bold uppercase tracking-wider text-gray-600 truncate">2 · Tipo de cobertura</span>
+          </span>
+          <span class="flex items-center gap-2 shrink-0">
+            <span class="text-[11px] text-emerald-600 font-semibold" x-show="openStep!==2" x-text="summaryGrupos"></span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="openStep===2 && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </span>
+        </button>
+        <div x-show="openStep===2" x-collapse class="p-3 border-t border-gray-100">
+          <p x-show="selectedCompanies.length===0" class="text-xs text-gray-400 mb-2">Elegí compañías primero (paso 1).</p>
+          <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer bg-emerald-50 hover:bg-emerald-100 mb-1">
+            <input type="checkbox" :checked="allGruposSelected" @change="toggleAllGrupos()" class="rounded text-emerald-600">
+            <span class="text-xs font-bold text-emerald-700">Todos los tipos</span>
+          </label>
+          <div class="space-y-0.5 border border-gray-100 rounded-lg p-1">
+            <template x-for="g in grupos" :key="g">
+              <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                <input type="checkbox" :checked="selectedGrupos.includes(g)" @change="toggleGrupo(g)" class="rounded text-emerald-600">
+                <span class="text-xs text-gray-700" x-text="g"></span>
+              </label>
+            </template>
+          </div>
         </div>
       </div>
 
-      <!-- Compare button -->
+      <!-- Botón comparar -->
       <button x-show="canCompare" @click="compare()" :disabled="loading"
         class="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
         <span x-show="!loading">Ver comparativa →</span>
         <span x-show="loading">Cargando...</span>
       </button>
 
-      <!-- 3 · PLANES disponibles (visible después de comparar) -->
-      <div x-show="columns.length > 0">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-          3 · Planes a mostrar
-          <span class="text-blue-600 font-normal" x-text="'('+visibleColumns.length+'/'+columns.length+')'"></span>
-        </label>
-        <div class="space-y-0.5 max-h-72 overflow-y-auto border border-gray-100 rounded-lg p-1">
-          <template x-for="col in columns" :key="col.id">
-            <label class="flex items-start gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-              <input type="checkbox" :checked="!hiddenColumns.includes(col.id)" @change="togglePlan(col.id)" class="rounded text-blue-600 shrink-0 mt-0.5">
-              <span class="text-xs leading-tight">
-                <span class="text-gray-700 font-medium" x-text="col.nombre"></span>
-                <span class="text-gray-400 block" x-show="col.plan_real" x-text="col.plan_real"></span>
-              </span>
-            </label>
-          </template>
-        </div>
-        <div class="flex gap-3 mt-1">
-          <button @click="hiddenColumns=[]" class="text-xs text-blue-600 hover:underline">Todos</button>
-          <span class="text-gray-200">|</span>
-          <button @click="hiddenColumns=columns.map(c=>c.id)" class="text-xs text-gray-400 hover:underline">Ninguno</button>
+      <!-- PASO 3 · PLANES -->
+      <div class="border border-gray-200 rounded-xl overflow-hidden" x-show="columns.length > 0">
+        <button @click="setStep(3)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition text-left">
+          <span class="flex items-center gap-2 min-w-0">
+            <svg x-show="visibleColumns.length>0" class="w-4 h-4 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.1 3.1 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+            <span class="text-xs font-bold uppercase tracking-wider text-gray-600 truncate">3 · Planes a mostrar</span>
+          </span>
+          <span class="flex items-center gap-2 shrink-0">
+            <span class="text-[11px] text-blue-600 font-semibold" x-show="openStep!==3" x-text="summaryPlanes"></span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="openStep===3 && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </span>
+        </button>
+        <div x-show="openStep===3" x-collapse class="p-3 border-t border-gray-100">
+          <div class="space-y-0.5 max-h-72 overflow-y-auto border border-gray-100 rounded-lg p-1">
+            <template x-for="col in columns" :key="col.id">
+              <label class="flex items-start gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                <input type="checkbox" :checked="!hiddenColumns.includes(col.id)" @change="togglePlan(col.id)" class="rounded text-blue-600 shrink-0 mt-0.5">
+                <span class="text-xs leading-tight">
+                  <span class="text-gray-700 font-medium" x-text="col.nombre"></span>
+                  <span class="text-gray-400 block" x-show="col.plan_real" x-text="col.plan_real"></span>
+                </span>
+              </label>
+            </template>
+          </div>
+          <div class="flex gap-3 mt-1">
+            <button @click="hiddenColumns=[]" class="text-xs text-blue-600 hover:underline">Todos</button>
+            <span class="text-gray-200">|</span>
+            <button @click="hiddenColumns=columns.map(c=>c.id)" class="text-xs text-gray-400 hover:underline">Ninguno</button>
+          </div>
         </div>
       </div>
 
-      <!-- Coberturas filter (visible after compare) -->
-      <div x-show="allCoverageKeys.length > 0">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">4 · Coberturas a mostrar</label>
-        <input x-model="coverageSearch" type="text" placeholder="Buscar cobertura..."
-          class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-        <div class="space-y-1 max-h-52 overflow-y-auto">
-          <template x-for="key in filteredCoverageKeys" :key="key">
-            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
-              <input type="checkbox" :checked="selectedCoverageKeys.includes(key)"
-                @change="toggleCoverage(key)" class="rounded text-blue-600">
-              <span class="text-xs text-gray-700" x-text="coverageLabels[key]||key"></span>
-            </label>
-          </template>
-        </div>
-        <div class="flex gap-3 mt-1">
-          <button @click="selectedCoverageKeys=[...allCoverageKeys]" class="text-xs text-blue-600 hover:underline">Todas</button>
-          <span class="text-gray-200">|</span>
-          <button @click="selectedCoverageKeys=[]" class="text-xs text-gray-400 hover:underline">Ninguna</button>
+      <!-- PASO 4 · COBERTURAS -->
+      <div class="border border-gray-200 rounded-xl overflow-hidden" x-show="allCoverageKeys.length > 0">
+        <button @click="setStep(4)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition text-left">
+          <span class="flex items-center gap-2 min-w-0">
+            <svg x-show="selectedCoverageKeys.length>0" class="w-4 h-4 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.1 3.1 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+            <span class="text-xs font-bold uppercase tracking-wider text-gray-600 truncate">4 · Coberturas a mostrar</span>
+          </span>
+          <span class="flex items-center gap-2 shrink-0">
+            <span class="text-[11px] text-blue-600 font-semibold" x-show="openStep!==4" x-text="summaryCoberturas"></span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="openStep===4 && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </span>
+        </button>
+        <div x-show="openStep===4" x-collapse class="p-3 border-t border-gray-100">
+          <input x-model="coverageSearch" type="text" placeholder="Buscar cobertura..."
+            class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <div class="space-y-1 max-h-56 overflow-y-auto">
+            <template x-for="key in filteredCoverageKeys" :key="key">
+              <label class="flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                <input type="checkbox" :checked="selectedCoverageKeys.includes(key)"
+                  @change="toggleCoverage(key)" class="rounded text-blue-600">
+                <span class="text-xs text-gray-700" x-text="coverageLabels[key]||key"></span>
+              </label>
+            </template>
+          </div>
+          <div class="flex gap-3 mt-1">
+            <button @click="selectedCoverageKeys=[...allCoverageKeys]" class="text-xs text-blue-600 hover:underline">Todas</button>
+            <span class="text-gray-200">|</span>
+            <button @click="selectedCoverageKeys=[]" class="text-xs text-gray-400 hover:underline">Ninguna</button>
+          </div>
         </div>
       </div>
     </div>
@@ -413,7 +450,7 @@ function app(){return{
   syncTotal:0, syncDone:0, syncCurrent:'', syncError:null,
   toast:'', showAddUrl:false,
   newCo:{nombre:'',url:'',logo:''},
-  showOptions:false, sidebarOpen:true,
+  showOptions:false, sidebarOpen:true, openStep:1,
 
   get filteredCompanies(){
     const q=this.companySearch.toLowerCase();
@@ -445,6 +482,13 @@ function app(){return{
     const q=this.coverageSearch.toLowerCase();
     return this.allCoverageKeys.filter(k=>(this.coverageLabels[k]||k).toLowerCase().includes(q));
   },
+
+  // ── Acordeón de pasos ──
+  setStep(n){ this.openStep = this.openStep===n ? 0 : n; },
+  get summaryCompanies(){ return this.selectedCompanies.length ? this.selectedCompanies.length+' sel.' : 'Ninguna'; },
+  get summaryGrupos(){ if(this.allGruposSelected) return 'Todos'; return this.selectedGrupos.length ? this.selectedGrupos.length+' sel.' : '—'; },
+  get summaryPlanes(){ return this.columns.length ? this.visibleColumns.length+'/'+this.columns.length : '—'; },
+  get summaryCoberturas(){ if(!this.allCoverageKeys.length) return '—'; return this.selectedCoverageKeys.length===this.allCoverageKeys.length ? 'Todas' : this.selectedCoverageKeys.length+'/'+this.allCoverageKeys.length; },
 
   async init(){
     if(!token()){window.location.href='/';return;}
@@ -533,13 +577,22 @@ function app(){return{
       else if(this.selectedPlan) url+=`&plan=${encodeURIComponent(this.selectedPlan)}`;
       const r=await api(url); if(!r||!r.ok) return;
       const data=await r.json();
+      const newCols=data.columns||[];
+      const newIds=new Set(newCols.map(c=>c.id));
       this.compareResult=data;
-      this.hiddenColumns=[];
+      // Preservar planes destildados que sigan existiendo (no reiniciar la selección)
+      this.hiddenColumns=this.hiddenColumns.filter(id=>newIds.has(id));
       this.coverageLabels=data.coverage_keys||{};
-      this.allCoverageKeys=Object.keys(data.coverage_keys||{});
-      this.selectedCoverageKeys=[...this.allCoverageKeys];
+      const newKeys=Object.keys(data.coverage_keys||{});
+      const prev=this.allCoverageKeys;
+      const sameKeys=prev.length===newKeys.length && newKeys.every(k=>prev.includes(k));
+      this.allCoverageKeys=newKeys;
+      // Preservar coberturas elegidas si el conjunto no cambió; si no, mostrar todas
+      if(!sameKeys || !this.selectedCoverageKeys.length) this.selectedCoverageKeys=[...newKeys];
+      else this.selectedCoverageKeys=this.selectedCoverageKeys.filter(k=>newKeys.includes(k));
       const tipo=this.selectedGrupos.length ? this.selectedGrupos.join(' + ') : this.selectedPlan;
       this.currentTitle=`${this.selectedRama} · ${tipo}`;
+      this.openStep=3;  // auto-avance al paso de planes
     }finally{this.loading=false;}
   },
   hideColumn(id){ if(!this.hiddenColumns.includes(id)) this.hiddenColumns.push(id); },
