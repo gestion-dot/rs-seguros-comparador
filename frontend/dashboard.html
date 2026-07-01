@@ -43,10 +43,10 @@
 <!-- NAVBAR -->
 <nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
   <div class="flex items-center gap-3">
-    <button @click="sidebarOpen=!sidebarOpen" :title="sidebarOpen?'Ocultar filtros':'Mostrar filtros'"
-      class="text-gray-500 hover:text-blue-700 transition p-1.5 rounded-lg hover:bg-gray-100">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+    <button @click="sidebarOpen=!sidebarOpen" :title="sidebarOpen?'Ocultar panel de filtros':'Mostrar panel de filtros'"
+      class="flex items-center gap-1 text-gray-500 hover:text-blue-700 transition px-2 py-1.5 rounded-lg hover:bg-gray-100">
+      <svg class="w-5 h-5 transition-transform" :class="!sidebarOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7M18 19l-7-7 7-7"/>
       </svg>
     </button>
     <img src="/assets/logos/rs.png"
