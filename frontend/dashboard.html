@@ -352,7 +352,7 @@
   </aside>
 
   <!-- MAIN CONTENT -->
-  <main class="flex-1 overflow-auto px-6 pt-5 pb-2">
+  <main class="flex-1 overflow-auto px-3 md:px-6 pt-3 md:pt-5 pb-2">
 
     <!-- Empty state -->
     <div x-show="!compareResult" class="flex flex-col items-center justify-center h-full text-center text-gray-400">
@@ -379,8 +379,56 @@
         <p class="text-sm mt-1 text-gray-400">Probá con otro tipo de cobertura o sumá más compañías.</p>
       </div>
 
-      <!-- Comparison table -->
-      <div x-show="visibleColumns.length>0" class="tabla-scroll rounded-xl border border-gray-200 shadow-sm">
+      <!-- Resultado: tarjetas en celular / tabla en PC -->
+      <div x-show="visibleColumns.length>0">
+
+        <!-- CELULAR: una tarjeta por plan, deslizables -->
+        <div class="md:hidden">
+          <p class="text-[11px] text-gray-400 mb-2 text-center">👉 Deslizá para ver cada plan · <span x-text="visibleColumns.length"></span> plan(es) · después tocá «Generar imagen»</p>
+          <div class="flex gap-3 overflow-x-auto pb-3" style="scroll-snap-type:x mandatory">
+            <template x-for="col in visibleColumns" :key="col.id">
+              <div class="shrink-0 w-[86vw] max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" style="scroll-snap-align:center">
+                <!-- Cabecera: logo + botón quitar -->
+                <div class="bg-slate-800 p-1.5 flex items-center justify-center relative">
+                  <button @click="hideColumn(col.id)" title="Quitar plan"
+                    class="absolute top-1 right-1.5 text-slate-300 hover:text-red-400 text-base leading-none z-10">✕</button>
+                  <template x-if="col.logo_url">
+                    <span class="bg-white rounded w-full flex items-center justify-center px-2" style="height:52px">
+                      <img :src="col.logo_url" class="max-h-[46px] max-w-full object-contain" :alt="col.nombre" onerror="this.style.display='none'">
+                    </span>
+                  </template>
+                  <span class="text-sm font-bold text-white py-3" x-show="!logoConNombre(col.logo_url)" x-text="col.nombre"></span>
+                </div>
+                <div class="bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-600 text-center leading-tight border-b border-slate-200" x-text="col.plan_real||'—'"></div>
+                <!-- Coberturas: etiqueta a la izq, valor a la der -->
+                <div class="divide-y divide-gray-100">
+                  <template x-for="key in selectedCoverageKeys" :key="key">
+                    <div class="flex items-start justify-between gap-2 px-3 py-1.5">
+                      <span class="text-[11px] text-gray-600 leading-snug flex-1 pt-0.5" x-text="coverageLabels[key]||key"></span>
+                      <template x-if="key==='inspeccion' || key==='antiguedad_maxima'">
+                        <span class="text-[11px] font-semibold text-slate-700 text-right leading-snug shrink-0 max-w-[52%]"
+                          x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto'&&col.coberturas[key]!=='FALTA MANUAL PRODUCTO') ? col.coberturas[key] : '–'"></span>
+                      </template>
+                      <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
+                        <span class="text-[11px] font-semibold rounded px-1.5 py-0.5 text-right leading-snug shrink-0 max-w-[52%]" :class="cellClass(col.coberturas[key])">
+                          <span x-show="showIcon(key, col.coberturas[key])" x-text="cellIcon(col.coberturas[key])"></span>
+                          <span x-show="detailText(key, col.coberturas[key])" x-text="detailText(key, col.coberturas[key])"></span>
+                        </span>
+                      </template>
+                    </div>
+                  </template>
+                  <div x-show="col.particularidades" class="px-3 py-2 bg-gray-50">
+                    <span class="text-[10px] uppercase font-bold text-gray-400">Particularidades</span>
+                    <p class="text-[11px] text-gray-500 italic leading-snug" x-text="col.particularidades"></p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- PC/TABLET: tabla comparativa -->
+        <div class="hidden md:block tabla-scroll rounded-xl border border-gray-200 shadow-sm">
         <table id="compare-table" class="min-w-full text-xs">
           <thead>
             <tr>
@@ -439,6 +487,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </main>
