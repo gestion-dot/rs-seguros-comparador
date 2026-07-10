@@ -406,15 +406,17 @@
                     <div class="flex items-start justify-between gap-2 px-3 py-1.5">
                       <span class="text-[11px] text-gray-600 leading-snug flex-1 pt-0.5" x-text="coverageLabels[key]||key"></span>
                       <template x-if="key==='inspeccion' || key==='antiguedad_maxima'">
-                        <span class="text-[11px] font-semibold text-slate-700 text-right leading-snug shrink-0 max-w-[52%]"
+                        <span class="text-[11px] font-semibold text-slate-700 text-right leading-snug shrink-0 max-w-[46%]"
                           x-text="(col.coberturas[key]&&col.coberturas[key]!=='No especificado'&&col.coberturas[key]!=='No cubierto'&&col.coberturas[key]!=='FALTA MANUAL PRODUCTO') ? col.coberturas[key] : '–'"></span>
                       </template>
                       <template x-if="key!=='inspeccion' && key!=='antiguedad_maxima'">
-                        <span class="text-[11px] font-semibold rounded px-1.5 py-0.5 text-right leading-snug shrink-0 max-w-[52%]" :class="cellClass(col.coberturas[key])">
+                        <span class="text-[11px] font-semibold rounded px-1.5 py-0.5 text-right leading-snug shrink-0 max-w-[46%]" :class="cellClass(col.coberturas[key])">
                           <span x-show="showIcon(key, col.coberturas[key])" x-text="cellIcon(col.coberturas[key])"></span>
                           <span x-show="detailText(key, col.coberturas[key])" x-text="detailText(key, col.coberturas[key])"></span>
                         </span>
                       </template>
+                      <button @click="toggleCoverage(key)" title="Ocultar esta cobertura"
+                        class="shrink-0 text-gray-300 hover:text-red-500 text-sm leading-none pt-0.5 -mr-1 px-1">✕</button>
                     </div>
                   </template>
                   <div x-show="col.particularidades" class="px-3 py-2 bg-gray-50">
